@@ -1,6 +1,9 @@
-def main():
-    print("Hello from kasbench-load-generator!")
+"""Application entry point for the KASBench Load Generator service."""
 
+import uvicorn
+
+from kasbench_load_generator.app import app
+from kasbench_load_generator import config
 
 if __name__ == "__main__":
-    main()
+    uvicorn.run(app, host=config.HOST, port=config.PORT)
