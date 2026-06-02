@@ -33,8 +33,8 @@ graph TD
     
     L --> M[GlobeCo Application]
     
-    I -->|writes| N[/data/output.log]
-    J -->|writes| O[/data/kasbench.db]
+    I -->|writes| N["/data/output.log"]
+    J -->|writes| O["/data/kasbench.db"]
     
     G -->|reads| O
     H -->|reads| N

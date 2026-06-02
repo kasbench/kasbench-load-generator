@@ -1,0 +1,37 @@
+ERROR:root:Uncaught exception in event handler: 
+Traceback (most recent call last):
+  File "/Users/noahkrieger/projects/dissertation/kasbench/kasbench-load-generator/.venv/lib/python3.14/site-packages/locust/event.py", line 47, in fire
+    handler(**kwargs)
+    ~~~~~~~^^^^^^^^^^
+  File "/Users/noahkrieger/projects/dissertation/kasbench/kasbench-load-generator/src/kasbench_load_generator/kasbench_shape.py", line 13, in _
+    parser.add_argument("--spawn-rate", type=int, default=1)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/noahkrieger/projects/dissertation/kasbench/kasbench-load-generator/.venv/lib/python3.14/site-packages/locust/argument_parser.py", line 84, in add_argument
+    action = super().add_argument(*args, **kwargs)
+  File "/Users/noahkrieger/projects/dissertation/kasbench/kasbench-load-generator/.venv/lib/python3.14/site-packages/configargparse.py", line 1734, in add_argument
+    action = self.original_add_argument_method(*args, **kwargs)
+  File "/Users/noahkrieger/.local/share/uv/python/cpython-3.14.2-macos-aarch64-none/lib/python3.14/argparse.py", line 1562, in add_argument
+    return self._add_action(action)
+           ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/Users/noahkrieger/.local/share/uv/python/cpython-3.14.2-macos-aarch64-none/lib/python3.14/argparse.py", line 1983, in _add_action
+    self._optionals._add_action(action)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/Users/noahkrieger/.local/share/uv/python/cpython-3.14.2-macos-aarch64-none/lib/python3.14/argparse.py", line 1785, in _add_action
+    action = super(_ArgumentGroup, self)._add_action(action)
+  File "/Users/noahkrieger/.local/share/uv/python/cpython-3.14.2-macos-aarch64-none/lib/python3.14/argparse.py", line 1576, in _add_action
+    self._check_conflict(action)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/Users/noahkrieger/.local/share/uv/python/cpython-3.14.2-macos-aarch64-none/lib/python3.14/argparse.py", line 1718, in _check_conflict
+    conflict_handler(action, confl_optionals)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/noahkrieger/.local/share/uv/python/cpython-3.14.2-macos-aarch64-none/lib/python3.14/argparse.py", line 1727, in _handle_conflict_error
+    raise ArgumentError(action, message % conflict_string)
+argparse.ArgumentError: argument --spawn-rate: conflicting option string: --spawn-rate
+
+locust: error: unrecognized arguments: --base-delay-percentage --kasbench-url http://globeco.local:32080
+Exception ignored on calling weakref callback <function _removeHandlerRef at 0x105976e50>:
+Traceback (most recent call last):
+  File "/Users/noahkrieger/.local/share/uv/python/cpython-3.14.2-macos-aarch64-none/lib/python3.14/logging/__init__.py", line 893, in _removeHandlerRef
+  File "/Users/noahkrieger/.local/share/uv/python/cpython-3.14.2-macos-aarch64-none/lib/python3.14/threading.py", line 207, in acquire
+  File "/Users/noahkrieger/projects/dissertation/kasbench/kasbench-load-generator/.venv/lib/python3.14/site-packages/gevent/thread.py", line 81, in get_ident
+RuntimeError: greenlet is being finalized

@@ -43,9 +43,10 @@ class SubprocessManager:
         self._internal_error_count: int = 0
         self._last_five_errors: list[str] = []
 
-        # Subprocess placeholders (for later tasks)
+        # Subprocess placeholders
         self._process: subprocess.Popen | None = None
         self._monitor_task: asyncio.Task | None = None
+        self._output_file = None  # Keep file handle open for subprocess lifetime
 
     @property
     def is_running(self) -> bool:
@@ -177,6 +178,7 @@ class SubprocessManager:
                 os.makedirs(output_dir, exist_ok=True)
 
             output_file = open(self._output_path, "w")
+            self._output_file = output_file  # Keep reference to prevent GC
             self._process = subprocess.Popen(
                 command,
                 stdout=output_file,
@@ -277,16 +279,18 @@ class SubprocessManager:
         """Monitor the subprocess and update status when it exits.
 
         Polls process.poll() every 1 second. When the process exits
-        (poll() returns not None), sets status to COMPLETED.
-        A 1-second poll interval ensures detection within the
-        STATUS_UPDATE_TIMEOUT_SECONDS (5 seconds) window.
-
-        If self._process is None, returns immediately without changing status.
+        (poll() returns not None), sets status to COMPLETED and closes
+        the output file handle.
         """
         if self._process is None:
             return
 
         while self._process.poll() is None:
             await asyncio.sleep(1)
+
+        # Close output file handle
+        if self._output_file is not None:
+            self._output_file.close()
+            self._output_file = None
 
         self._status = StatusEnum.COMPLETED

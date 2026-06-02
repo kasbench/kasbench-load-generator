@@ -10,7 +10,6 @@ def _(parser, **kwargs):
     parser.add_argument("--role", type=str, default="")
     parser.add_argument("--benchmark-length-minutes", type=int, default=60)
     parser.add_argument("--base-load-intensity", type=int, default=100)
-    parser.add_argument("--spawn-rate", type=int, default=1)
     parser.add_argument("--base-delay-percentage", type=int, default=100)
     parser.add_argument("--kasbench-url", type=str, default="")
 

@@ -65,11 +65,11 @@ Launches a Locust subprocess with the specified parameters.
 ```json
 {
   "Role": "portfolio-manager",
-  "BenchmarkLengthMinutes": 60,
+  "BenchmarkLengthMinutes": 10,
   "BaseLoadIntensity": 100,
   "SpawnRate": 10,
   "BaseDelayPercentage": 50,
-  "KasbenchUrl": "http://globeco-app:8080"
+  "KasbenchUrl": "http://globeco.local:32080"
 }
 ```
 
