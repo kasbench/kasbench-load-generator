@@ -277,7 +277,7 @@ class KasbenchCustomShape(LoadTestShape):
 
         # Apply exogenous event spike if within ±30 minutes of event
         if abs(simulated_minutes - self.EXOGENOUS_EVENT_MINUTE) <= 30:
-            user_count = max(int(1.5 * lookup_value), MAX_USERS[role])
+            user_count = min(int(1.5 * lookup_value), MAX_USERS[role])
 
         # Apply base_load_intensity scaling
         user_count = int(user_count * base_load_intensity / 100)
