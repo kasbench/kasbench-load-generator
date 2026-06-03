@@ -1,67 +1,58 @@
+import logging
+import random
+import resource
+import sqlite3
 import sys
 import time
 import uuid
-import requests
-import random
-import asyncio
-import logging
 from pathlib import Path
 
-from locust import HttpUser, task, between, events, constant, FastHttpUser
-from queue import Queue, Empty
-from gevent.lock import Semaphore
-import sqlite3
 
-import resource
-try:
-    resource.setrlimit(resource.RLIMIT_NOFILE, (10240, 9223372036854775807))
-except:
-    # Throws an exception on Ubuntu.  Helpful for Mac
-    pass
+from locust import HttpUser, between, events
 
 # Add the kasbench_load_generator package directory to sys.path so that
 # locust_common can be resolved when Locust runs this file as a script.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import locust_common.portal_client as portal_client
-from locust_common.securities import securities
 from kasbench_load_generator import config
+from locust_common import portal_client as portal_client
+from locust_common.portal_common import create_cash_transaction, post_transactions, create_models
+from locust_common.securities import securities
 
-
-from locust_common.portal_common import create_cash_transaction, post_transactions, create_models, post_portfolio_group
-
-PORTFOLIOS_PER_MODEL = 10
-POSITIONS_PER_MODEL = 25
+PORTFOLIOS_PER_MODEL = 5
+POSITIONS_PER_MODEL = 10
 MAX_RETRIES = 3
+
+# Set resource limits for Mac
+try:
+    resource.setrlimit(resource.RLIMIT_NOFILE, (10240, 9223372036854775807))
+except OSError:
+    # Throws an exception on Ubuntu.  Helpful for Mac
+    pass
 
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
 
-@events.init_command_line_parser.add_listener
-def _(parser):
-    parser.add_argument("--sqlite_db", type=str, default="sqlite.db", help="Path to sqlite database")
-
-
-
-
-class PortfolioManagerUser(HttpUser):
-    wait_time = between(5, 20)
-    
+class BaseUser(HttpUser):
     counter = 0
+    wait_time = between(5, 20)
+    abstract = True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # Cache static list of securities
+        self.conn = None
         self.securities = securities
+        self.user_id = str(uuid.uuid4())
+        self.sqlite_db = config.DB_PATH
+        self.portfolio_ids = []
 
     def on_start(self):
         # Assign a unique ID (UUID4) to each user instance
         self.user_id = str(uuid.uuid4())
         logging.info(f"User {self.user_id} started")
-        
+
         # wait_time does not apply to the first call.  This assures that the first API calls are staggered
         # even if all users start at the same time.
         time.sleep(random.uniform(1, 30))
@@ -85,7 +76,6 @@ class PortfolioManagerUser(HttpUser):
                 url TEXT
             )
         ''')
-    
 
     def context(self):
         return {
@@ -93,7 +83,6 @@ class PortfolioManagerUser(HttpUser):
             "conn": self.conn
         }
 
-    
     def fund_portfolios_with_cash(self, portfolio_ids):
         # print("Funding portfolios with cash")
         funded_portfolio_ids = []
@@ -111,7 +100,6 @@ class PortfolioManagerUser(HttpUser):
                     time.sleep(backoff_time)
                 raise Exception(f"Failed to fund portfolio: {portfolio_id}. Results: {results}")
         return funded_portfolio_ids
-    
 
     def create_models_for_portfolios(self, portfolio_ids):
         # print("Creating model")
@@ -120,9 +108,8 @@ class PortfolioManagerUser(HttpUser):
             return response
         else:
             raise Exception(f"No models created.")
-                
 
-    def rebalance_models(self, model_id): 
+    def rebalance_models(self, model_id):
         # print("Rebalancing model")
         response = portal_client.rebalance_investment_model(self.client, model_id)
         if response.ok:
@@ -151,7 +138,6 @@ class PortfolioManagerUser(HttpUser):
             return trade_order_ids
         else:
             raise Exception(f"Failed to submit orders: {order_ids}.  Status code: {response.status_code}, Reason: {response.reason}")
-        
 
     def submit_trades(self, submitted_order_ids):
         # print("Submitting trades")
@@ -160,7 +146,6 @@ class PortfolioManagerUser(HttpUser):
         if not response.ok:
             print(f"Failed to submit trades: {submitted_order_ids}.  Status code: {response.status_code}, Reason: {response.reason}")
             raise Exception(f"Failed to submit trades: {submitted_order_ids}.  Status code: {response.status_code}, Reason: {response.reason}")
-        
 
     def submit_trades_slow(self, submitted_order_ids):
         # print("Submitting trades")
@@ -174,64 +159,13 @@ class PortfolioManagerUser(HttpUser):
                 quantity = response.json()['content'][0]['quantity']
                 response = portal_client.submit_trade(self.client,  id, quantity)
                 if response.ok:
-                    # print(f"Submitted trade: {id}")   
+                    # print(f"Submitted trade: {id}")
                     execution_id = response.json()['executionServiceId']
                     execution_ids.append(execution_id)
                 else:
                     raise Exception(f"Failed to submit trade: {id}.  Status code: {response.status_code}, Reason: {response.reason}")
-            else:       
+            else:
                 raise Exception(f"Failed to get trade order: {order_id}.  Status code: {response.status_code}, Reason: {response.reason}")
-
-
-    @task
-    def run_sequential(self):
-        time.sleep(random.uniform(1, 5))
-        # Create a group of portfolios
-        portfolio_ids = post_portfolio_group(self.client)
-        time.sleep(random.uniform(1, 5))
-        # Get each of them
-        for portfolio_id in portfolio_ids:
-            time.sleep(random.uniform(0, 2))
-            portal_client.get_portfolio(self.client, portfolio_id)
-        # Fund the portfolios
-        funded_portfolio_ids = self.fund_portfolios_with_cash(portfolio_ids)
-        # Create models for each funded portfolio
-        model_ids = self.create_models_for_portfolios(funded_portfolio_ids)
-        time.sleep(random.uniform(1, 5))
-        # Get the models
-        for model_id in model_ids:
-            time.sleep(random.uniform(0, 2))
-            portal_client.get_investment_model(self.client, model_id)
-        # Rebalance one of the models
-        time.sleep(random.uniform(1, 5))
-        rebalance_id = self.rebalance_models(model_ids[0])
-        # Submit the rebalance (send to the Order Service)
-        time.sleep(random.uniform(1, 5))
-        order_ids = self.submit_rebalance(rebalance_id)
-        # Process order_ids in batches of max_orders
-        max_orders = 10
-        for i in range(0, len(order_ids), max_orders):
-            try:
-                batch_order_ids = order_ids[i:i+max_orders]
-                time.sleep(random.uniform(0, 2))
-                # Submit order (send to Trading Service)
-                submitted_order_ids = self.submit_orders(batch_order_ids) 
-                time.sleep(random.uniform(0, 2))
-                # Submit trades (send to Execution Service)
-                self.submit_trades(submitted_order_ids)
-            except Exception as e:
-                print(f"Error submitting orders for batch {i}: {e}")
-                continue
-        # Get next 10 orders
-        time.sleep(random.uniform(0, 2))
-        portal_client.get_orders(self.client, offset=self.counter*10, limit=10)
-        # Get the next 10 trades
-        time.sleep(random.uniform(0, 2))
-        portal_client.get_trades(self.client, offset=self.counter*10, limit=10)
-        self.counter += 1
-        # Get executions for the first portfolio id
-        time.sleep(random.uniform(0, 2))
-        portal_client.get_executions(self.client, portfolio_id=portfolio_ids[0])
 
     @events.request.add_listener
     def on_request(
@@ -253,7 +187,7 @@ class PortfolioManagerUser(HttpUser):
             user_id = context["user_id"]
         else:
             user_id = "Unknown"
-            
+
         if exception:
             logging.error(f"Request to {name} failed: {exception}")
         # else:
@@ -261,13 +195,9 @@ class PortfolioManagerUser(HttpUser):
 
         if context and "conn" in context:
             conn = context["conn"]
-            cursor = conn.cursor()  
+            cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO logs (user_id, request_type, name, response_time, response_length, response, status_code, reason, exception, start_time, url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (user_id, request_type, name, response_time, response_length, str(response), response.status_code, response.reason, str(exception), start_time, url)
             )
             conn.commit()
-
-      
-        
-

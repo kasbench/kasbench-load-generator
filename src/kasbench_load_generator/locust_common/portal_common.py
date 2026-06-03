@@ -6,7 +6,7 @@ import time
 import locust_common.portal_client as portal_client
 
 
-PORTFOLIOS_PER_MODEL = 10
+PORTFOLIOS_PER_MODEL = 1
 MAX_RETRIES = 3
 
 def generate_model_positions(num_positions, securities, cash=0.05, increment=0.005):

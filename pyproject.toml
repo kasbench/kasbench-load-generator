@@ -3,13 +3,14 @@ name = "kasbench-load-generator"
 version = "0.1.0"
 description = "KASBench Load Generator - FastAPI microservice managing Locust subprocess for variable HTTP load generation"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn>=0.34.0",
     "locust>=2.32.0",
     "pydantic>=2.11.0",
     "httpx>=0.28.0",
+    "pika>=1.4.1",
 ]
 
 [dependency-groups]

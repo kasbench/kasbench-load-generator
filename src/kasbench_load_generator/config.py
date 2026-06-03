@@ -14,3 +14,8 @@ PORT = 8080
 # Subprocess management timeouts (seconds)
 TERMINATION_TIMEOUT_SECONDS = 10
 STATUS_UPDATE_TIMEOUT_SECONDS = 5
+
+# RabitMQ settings
+RABBITMQ_HOST = "localhost"
+RABBITMQ_PORT = 5672
+
