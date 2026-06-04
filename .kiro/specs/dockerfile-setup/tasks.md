@@ -6,8 +6,8 @@ This plan implements Docker containerization for the kasbench-load-generator ser
 
 ## Tasks
 
-- [ ] 1. Refactor config.py for environment variable support
-  - [ ] 1.1 Implement `_parse_positive_int` helper and refactor config.py
+- [x] 1. Refactor config.py for environment variable support
+  - [x] 1.1 Implement `_parse_positive_int` helper and refactor config.py
     - Add `import sys` to config.py
     - Implement `_parse_positive_int(name: str, default: int) -> int` that reads `os.environ.get(name)`, parses as int, validates > 0, and calls `sys.exit(1)` with stderr message on failure
     - Replace all hardcoded constants with `os.environ.get(KEY, default)` for strings and `_parse_positive_int(KEY, default)` for integers
@@ -28,11 +28,11 @@ This plan implements Docker containerization for the kasbench-load-generator ser
     - Verify PORT, TERMINATION_TIMEOUT_SECONDS, STATUS_UPDATE_TIMEOUT_SECONDS, RABBITMQ_PORT are `int` type
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8_
 
-- [ ] 2. Checkpoint - Validate config refactor
+- [x] 2. Checkpoint - Validate config refactor
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 3. Create Dockerfile
-  - [ ] 3.1 Create Dockerfile in project root
+- [x] 3. Create Dockerfile
+  - [x] 3.1 Create Dockerfile in project root
     - Use base image `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`
     - Set `WORKDIR /app`
     - Copy `pyproject.toml` and `uv.lock` first (layer caching)
@@ -44,8 +44,8 @@ This plan implements Docker containerization for the kasbench-load-generator ser
     - Set `CMD ["uv", "run", "python", "main.py"]`
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 2.11_
 
-- [ ] 4. Create build_and_push.sh script
-  - [ ] 4.1 Create build_and_push.sh in project root
+- [x] 4. Create build_and_push.sh script
+  - [x] 4.1 Create build_and_push.sh in project root
     - Add shebang `#!/usr/bin/env bash` and `set -e`
     - Validate exactly 2 arguments; if missing, print usage to stderr and exit 1
     - Assign `REPO=$1` and `TAG=$2`
@@ -59,11 +59,11 @@ This plan implements Docker containerization for the kasbench-load-generator ser
     - Invoke script with 1 arg and verify non-zero exit + usage message on stderr
     - _Requirements: 3.7_
 
-- [ ] 5. Checkpoint - Validate Dockerfile and script
+- [x] 5. Checkpoint - Validate Dockerfile and script
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Update README with Docker documentation
-  - [ ] 6.1 Add Docker section to README.md
+- [x] 6. Update README with Docker documentation
+  - [x] 6.1 Add Docker section to README.md
     - Add a "## Docker" section after the existing "## Configuration" section
     - Include a "### Building the Image" subsection with: `docker build -t kasbench-load-generator .`
     - Include a "### Running the Container" subsection with: `docker run -p 8080:8080 kasbench-load-generator`
@@ -71,7 +71,7 @@ This plan implements Docker containerization for the kasbench-load-generator ser
     - Include a "### Environment Variables" subsection with a table listing all 8 variables: name, default, one-line description
     - _Requirements: 4.1, 4.2, 4.3, 4.4_
 
-- [ ] 7. Final checkpoint - Ensure all tests pass
+- [x] 7. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

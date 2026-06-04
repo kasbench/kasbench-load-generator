@@ -172,6 +172,44 @@ Fixed container paths (defined in `config.py`):
 | `PORT` | `8080` | Server port |
 | `TERMINATION_TIMEOUT_SECONDS` | `10` | SIGTERM grace period before SIGKILL |
 | `STATUS_UPDATE_TIMEOUT_SECONDS` | `5` | Max delay detecting subprocess exit |
+| `RABBITMQ_HOST` | `localhost` | Hostname of RabbitMQ server |
+| `RABBITMQ_PORT` | `5672` | Port of the RabbitMQ server |
+
+## Docker
+
+### Building the Image
+
+```bash
+docker build -t kasbench-load-generator .
+```
+
+### Running the Container
+
+```bash
+docker run -p 8080:8080 kasbench-load-generator
+```
+
+### Environment Variable Overrides
+
+```bash
+docker run -p 9090:9090 \
+  -e PORT=9090 \
+  -e RABBITMQ_HOST=rabbitmq.local \
+  kasbench-load-generator
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_PATH` | `/data/kasbench.db` | Path to the SQLite database file |
+| `OUTPUT_PATH` | `/data/output.log` | Path to the Locust output log file |
+| `HOST` | `0.0.0.0` | Host address the server binds to |
+| `PORT` | `8080` | Port the server listens on |
+| `TERMINATION_TIMEOUT_SECONDS` | `10` | Timeout in seconds for graceful subprocess termination |
+| `STATUS_UPDATE_TIMEOUT_SECONDS` | `5` | Timeout in seconds for subprocess status updates |
+| `RABBITMQ_HOST` | `localhost` | RabbitMQ server hostname |
+| `RABBITMQ_PORT` | `5672` | RabbitMQ server port |
 
 ## License
 
