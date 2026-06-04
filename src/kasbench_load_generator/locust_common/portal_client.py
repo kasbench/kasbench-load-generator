@@ -315,9 +315,9 @@ def get_executions(client, offset:int=0, limit:int=100, status:str=None, portfol
     return response
 
 
-def get_execution(base:str, id:str) -> requests.Response:
-    execution = f"{base}/api/executions/{id}"
-    response = requests.get(execution)
+def get_execution(client, id:str) -> requests.Response:
+    execution = f"/api/executions/{id}"
+    response = client.get(execution, name="/api/executions/{id}")
     return response
 
 

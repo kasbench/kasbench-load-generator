@@ -171,9 +171,9 @@ class BaseUser(HttpUser):
                 raise Exception(f"Failed to get trade order: {order_id}.  Status code: {response.status_code}, Reason: {response.reason}")
 
     def submit_trade(self, submitted_order_id):
-        print("Submitting trades for order: ", submitted_order_id)
+        # print("Submitting trades for order: ", submitted_order_id)
         response = portal_client.get_trade_by_order_id(self.client, submitted_order_id)
-        print(f"Response: {response.text}")
+        # print(f"Response: {response.text}")
         if response.ok:
             id = response.json()['content'][0]['id']
             quantity = response.json()['content'][0]['quantity']
