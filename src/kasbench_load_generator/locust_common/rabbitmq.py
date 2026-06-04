@@ -10,9 +10,10 @@ PORTFOLIO_QUEUE_NAME = 'portfolio_queue'
 FUNDED_PORTFOLIO_QUEUE_NAME = 'funded_portfolio_queue'
 MODEL_QUEUE_NAME = 'model_queue'
 REBALANCE_QUEUE_NAME = 'rebalance_queue'
-
+EXECUTION_QUEUE_NAME = 'execution_queue'
 TRANSACTION_QUEUE_NAME = 'transaction_queue'
 ORDER_QUEUE_NAME = 'order_queue'
+
 CASH_QUEUE_NAME = 'cash_queue'
 PORTFOLIO_GROUP_QUEUE_NAME = 'portfolio_group_queue'
 ORDER_GROUP_QUEUE_NAME = 'order_group_queue'

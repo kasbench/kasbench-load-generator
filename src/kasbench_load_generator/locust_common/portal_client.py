@@ -213,8 +213,8 @@ def get_trades(client, offset:int=0, limit:int=100, status:str=None, blotter_id:
     if blotter_id:
         trades += f"&blotter_id={blotter_id}"
     response = client.get(trades, name="/api/trades")
-    if not response.ok:
-        print(f"Path: {trades}. Response: {response.text}")
+    # if not response.ok:
+    #     print(f"Path: {trades}. Response: {response.text}")
     return response
 
 
@@ -225,6 +225,7 @@ def get_trade(base:str, id:str) -> requests.Response:
 
 def get_trade_by_order_id(client:HttpUser, id:str) -> requests.Response:
     trade = f"/api/trades?orderId={id}"
+    # print(f"Getting trade by order id: {trade}")
     response = client.get(trade, name="/api/trades?orderId")
     return response
 
@@ -252,6 +253,15 @@ def submit_trade(client:HttpUser, ids:[str], quantities:[float]) -> requests.Res
     data = [{"tradeOrderId": trade_order_id, "destinationId": 1, "quantity": quantity} 
         for trade_order_id, quantity in zip(ids, quantities)]
     data = {"submissions": data}
+    # print(f"Submitting trades. URL: {trades} Data: {data}")
+    response = client.post(trades, json=data)
+    return response
+
+
+def submit_one_trade(client:HttpUser, id:str, quantity:float) -> requests.Response:
+    trades = f"/api/trade-orders/batch/submit"
+
+    data = {"submissions": [{"tradeOrderId": id, "destinationId": 1, "quantity": quantity}]}
     response = client.post(trades, json=data)
     return response
 

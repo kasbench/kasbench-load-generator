@@ -139,21 +139,24 @@ class BaseUser(HttpUser):
         else:
             raise Exception(f"Failed to submit orders: {order_ids}.  Status code: {response.status_code}, Reason: {response.reason}")
 
-    def submit_trades(self, submitted_order_ids):
+    def submit_trades_bulk(self, submitted_order_ids):
         # print("Submitting trades")
         execution_ids = []
         response = portal_client.submit_trade(self.client, submitted_order_ids, [1] * len(submitted_order_ids))
         if not response.ok:
             print(f"Failed to submit trades: {submitted_order_ids}.  Status code: {response.status_code}, Reason: {response.reason}")
             raise Exception(f"Failed to submit trades: {submitted_order_ids}.  Status code: {response.status_code}, Reason: {response.reason}")
+        print(f"Submitted trades response: {response.json()}")
+        return response.json()
 
-    def submit_trades_slow(self, submitted_order_ids):
+    def submit_trades(self, submitted_order_ids):
         # print("Submitting trades")
         execution_ids = []
         for order_id in submitted_order_ids:
             # print(f"Order id: {order_id}")
             # Get the trade order to find the id and quantity
             response = portal_client.get_trade_by_order_id(self.client, order_id)
+
             if response.ok:
                 id = response.json()['content'][0]['id']
                 quantity = response.json()['content'][0]['quantity']
@@ -166,6 +169,26 @@ class BaseUser(HttpUser):
                     raise Exception(f"Failed to submit trade: {id}.  Status code: {response.status_code}, Reason: {response.reason}")
             else:
                 raise Exception(f"Failed to get trade order: {order_id}.  Status code: {response.status_code}, Reason: {response.reason}")
+
+    def submit_trade(self, submitted_order_id):
+        print("Submitting trades for order: ", submitted_order_id)
+        response = portal_client.get_trade_by_order_id(self.client, submitted_order_id)
+        print(f"Response: {response.text}")
+        if response.ok:
+            id = response.json()['content'][0]['id']
+            quantity = response.json()['content'][0]['quantity']
+            quantitySent = response.json()['content'][0]['quantitySent']
+            response = portal_client.submit_trade(self.client,  [id], [quantity - quantitySent])
+            if response.ok:
+                # print(f"Submitted trade: {id}")
+                # print(f"Response: {response.json()}")
+                execution_id = response.json()["results"][0]["execution"]["executionServiceId"]
+                return execution_id
+            else:
+                raise Exception(f"Failed to submit trade: {id}.  Status code: {response.status_code}, Reason: {response.reason}")
+        else:
+            raise Exception(f"Failed to get trade order: {submitted_order_id}.  Status code: {response.status_code}, Reason: {response.reason}")
+
 
     @events.request.add_listener
     def on_request(
