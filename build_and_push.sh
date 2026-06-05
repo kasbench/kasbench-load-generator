@@ -12,8 +12,7 @@ TAG=$2
 docker buildx build \
  --platform linux/amd64,linux/arm64 \
  --tag "${REPO}:${TAG}" \
- --tag "${REPO}:latest \
+ --tag "${REPO}:latest" \
  --push \
- . || { echo "Error: Docker build failed" >&2; exit 1; }
-
-# docker push "${REPO}:${TAG}" || { echo "Error: Docker push failed" >&2; exit 1; }
+ . 
+ 

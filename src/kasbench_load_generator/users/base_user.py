@@ -29,6 +29,10 @@ try:
 except OSError:
     # Throws an exception on Ubuntu.  Helpful for Mac
     pass
+except ValueError:
+    # Throws an exception on Mac.  Helpful for Ubuntu
+    pass    
+
 
 
 # Configure logging
