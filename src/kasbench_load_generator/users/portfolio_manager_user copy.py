@@ -26,24 +26,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import locust_common.portal_client as portal_client
 from locust_common.securities import securities
 from kasbench_load_generator import config
-
-
 from locust_common.portal_common import create_cash_transaction, post_transactions, create_models, post_portfolio_group
 
-PORTFOLIOS_PER_MODEL = 10
-POSITIONS_PER_MODEL = 25
+PORTFOLIOS_PER_MODEL = 5
+POSITIONS_PER_MODEL = 10
 MAX_RETRIES = 3
 
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-
-@events.init_command_line_parser.add_listener
-def _(parser):
-    parser.add_argument("--sqlite_db", type=str, default="sqlite.db", help="Path to sqlite database")
-
-
+# @events.init_command_line_parser.add_listener
+# def _(parser):
+#     parser.add_argument("--sqlite_db", type=str, default="sqlite.db", help="Path to sqlite database")
 
 
 class PortfolioManagerUser(HttpUser):
@@ -62,8 +57,7 @@ class PortfolioManagerUser(HttpUser):
         self.user_id = str(uuid.uuid4())
         logging.info(f"User {self.user_id} started")
         
-        # wait_time does not apply to the first call.  This assures that the first API calls are staggered
-        # even if all users start at the same time.
+        # wait_time does not apply to the first call.  The following helps to stagger the initial calls.
         time.sleep(random.uniform(1, 30))
 
         self.sqlite_db = config.DB_PATH
@@ -95,7 +89,6 @@ class PortfolioManagerUser(HttpUser):
 
     
     def fund_portfolios_with_cash(self, portfolio_ids):
-        # print("Funding portfolios with cash")
         funded_portfolio_ids = []
         for portfolio_id in portfolio_ids:
             for i in range(MAX_RETRIES):

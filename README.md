@@ -186,7 +186,7 @@ docker build -t kasbench-load-generator .
 ### Running the Container
 
 ```bash
-docker run -p 8080:8080 kasbench-load-generator
+docker run -p 8080:8080 kasbench/kasbench-load-generator
 ```
 
 ### Environment Variable Overrides

@@ -27,7 +27,7 @@ class PortfolioManagerUser(BaseUser):
 
     @task
     def run_sequential(self):
-        time.sleep(random.uniform(1, 10))
+        self.wait_short()
 
 
         # Get a funded portfolio
@@ -37,39 +37,39 @@ class PortfolioManagerUser(BaseUser):
 
         # Create models for each funded portfolio
         model_ids = self.create_models_for_portfolios([funded_portfolio_id])
-        time.sleep(random.uniform(1, 10))
+        self.wait_short()
 
         if not model_ids:
             return
 
         # Get the models to generate load and put them in the queue
         for model_id in model_ids:
-            time.sleep(random.uniform(1, 10))
+            self.wait_short()
             portal_client.get_investment_model(self.client, model_id)
-            time.sleep(random.uniform(1, 10))
+            self.wait_short()
             sync_publish(MODEL_QUEUE_NAME, model_id)
 
         # Rebalance one of the models
-        time.sleep(random.uniform(1, 10))
+        self.wait_short()
         rebalance_id = self.rebalance_models(model_ids[0])
         sync_publish(REBALANCE_QUEUE_NAME, rebalance_id)
 
         # Submit the rebalance (send to the Order Service)
-        time.sleep(random.uniform(1, 10))
+        self.wait_short()
         order_ids = self.submit_rebalance(rebalance_id)
+     
         # Process order_ids in batches of max_orders
         max_orders = 10
         for i in range(0, len(order_ids), max_orders):
             try:
                 batch_order_ids = order_ids[i:i+max_orders]
-                time.sleep(random.uniform(1, 10))
+                self.wait_short()
                 # Submit order (send to Trading Service)
                 submitted_order_ids = self.submit_orders(batch_order_ids)
                 for submitted_order_id in submitted_order_ids:
                     sync_publish(ORDER_QUEUE_NAME, str(submitted_order_id))
                     time.sleep(random.uniform(1, 10))
-                # Submit trades (send to Execution Service)
-                # self.submit_trades(submitted_order_ids)
+                
             except Exception as e:
                 print(f"Error submitting orders for batch {i}: {e}")
                 continue

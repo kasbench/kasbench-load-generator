@@ -30,7 +30,7 @@ class Investor(BaseUser):
 
     @task(10)
     def run_sequential(self):
-        time.sleep(random.uniform(1, 10))
+        self.wait_short()
 
         # Get a portfolio
         portfolio_id = get_one_or_none(PORTFOLIO_QUEUE_NAME)
@@ -40,10 +40,10 @@ class Investor(BaseUser):
 
             # Get the portfolio (simulate a read operation)
             portal_client.get_portfolio(self.client, portfolio_id)
-            time.sleep(random.uniform(1, 10))
+            self.wait_short()
 
         # Get an execution
-        time.sleep(random.uniform(1, 10))
+        self.wait_short()
         execution_id = get_one_or_none(EXECUTION_QUEUE_NAME)
         if execution_id:
             # Put the execution_id back in the queue (so we don't run out of executions)
@@ -51,7 +51,7 @@ class Investor(BaseUser):
 
             # Get the execution (simulate a read operation)
             portal_client.get_execution(self.client, execution_id)
-            time.sleep(random.uniform(1, 10))
+            self.wait_short()
 
 
 

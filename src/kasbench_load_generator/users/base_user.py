@@ -52,6 +52,11 @@ class BaseUser(HttpUser):
         self.sqlite_db = config.DB_PATH
         self.portfolio_ids = []
 
+        options = self.environment.parsed_options
+        self.base_delay_percentage: int = options.base_delay_percentage
+        assert self.base_delay_percentage >= 0
+        
+
     def on_start(self):
         # Assign a unique ID (UUID4) to each user instance
         self.user_id = str(uuid.uuid4())
@@ -86,6 +91,10 @@ class BaseUser(HttpUser):
             "user_id": self.user_id,
             "conn": self.conn
         }
+
+
+    def wait_short(self):
+        time.sleep(random.uniform(1.0 * self.base_delay_percentage/100.0, 10.0 * self.base_delay_percentage/100))
 
     def fund_portfolios_with_cash(self, portfolio_ids):
         # print("Funding portfolios with cash")

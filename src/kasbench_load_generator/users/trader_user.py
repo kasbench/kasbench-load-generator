@@ -25,7 +25,7 @@ class TraderUser(BaseUser):
 
     @task
     def run_sequential(self):
-        time.sleep(random.uniform(1, 10))
+        self.wait_short()
 
         # Get a submitted order
         order_id = get_one_or_none(ORDER_QUEUE_NAME)
@@ -38,4 +38,4 @@ class TraderUser(BaseUser):
         # Publish the execution id to the execution queue
         sync_publish(EXECUTION_QUEUE_NAME, str(execution_id))
 
-        time.sleep(random.uniform(1, 10))
+        self.wait_short()
