@@ -1,5 +1,7 @@
 # Requirement 3: Enhancements to GET /health output
 
+1.  Add new fields to the GET /health API response object
+
 - This is the current code for GET /health
 ```python
     def get_health(self) -> HealthResponse:
@@ -26,13 +28,48 @@
     - StartTime: the time /start API was processed
     - EndTime: the time the Locust execution completed (or null/empty if Locust is currently running)
 
-- Replace the 
 
-```python
-class StatusEnum(str, Enum):
-    """Subprocess lifecycle states."""
+2. Update the status response of the GET /health API response object
 
-    NOT_STARTED = "not-started"
-    RUNNING = "running"
-    COMPLETED = "completed"
-```
+- Add two new statuses to self._status in HealthResponse (see above):
+    - "failed" - process has encountered an unrecoverable error
+    - "aborted" - process has been deliberately aborted
+
+- Change the status "completed" to "success"
+
+
+    Existing StatusEnum:
+
+    ```python
+    class StatusEnum(str, Enum):
+        """Subprocess lifecycle states."""
+
+        NOT_STARTED = "not-started"
+        RUNNING = "running"
+        COMPLETED = "completed"
+    ```
+
+    Change to:
+    ```python
+    class StatusEnum(str, Enum):
+        """Subprocess lifecycle states."""
+
+        NOT_STARTED = "not-started"
+        RUNNING = "running"
+        SUCCESS = "success"
+        FAILED = "failed"
+        ABORTED = "aborted"
+    ```
+
+3. Make sure that all fields in HealthResponse are being valued correctly.
+
+- The following fields do not appear to be updated properly:
+    - SuccessCount
+    - FailureCount
+    - InternalErrorCount
+    - LastFiveErrorMessages
+
+4. Add a new POST /abort endpoint
+
+- This endpoint should abort/kill any running Locust subprocesses.
+- When successfully aborted, it should set status to "aborted"
