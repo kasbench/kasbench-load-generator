@@ -21,7 +21,9 @@ class StatusEnum(str, Enum):
 
     NOT_STARTED = "not-started"
     RUNNING = "running"
-    COMPLETED = "completed"
+    SUCCESS = "success"
+    FAILED = "failed"
+    ABORTED = "aborted"
 
 
 class StartRequest(BaseModel):
@@ -73,6 +75,8 @@ class HealthResponse(BaseModel):
     InternalErrorCount: int
     LastFiveErrorMessages: list[str]
     CurrentTimeStamp: str
+    StartTime: str | None
+    EndTime: str | None
 
 
 class ErrorResponse(BaseModel):

@@ -53,7 +53,7 @@ class TestAbortNotRunning:
 
     @pytest.mark.asyncio
     async def test_abort_raises_409_when_completed(self, manager: SubprocessManager) -> None:
-        manager._status = StatusEnum.COMPLETED
+        manager._status = StatusEnum.SUCCESS
         with pytest.raises(HTTPException) as exc_info:
             await manager.abort()
         assert exc_info.value.status_code == 409
@@ -79,9 +79,9 @@ class TestAbortGracefulTermination:
         running_manager._process.kill.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_abort_updates_status_to_completed(self, running_manager: SubprocessManager) -> None:
+    async def test_abort_updates_status_to_aborted(self, running_manager: SubprocessManager) -> None:
         await running_manager.abort()
-        assert running_manager._status == StatusEnum.COMPLETED
+        assert running_manager._status == StatusEnum.ABORTED
 
     @pytest.mark.asyncio
     async def test_abort_returns_abort_response_with_timestamp(self, running_manager: SubprocessManager) -> None:
@@ -120,7 +120,7 @@ class TestAbortSigkillEscalation:
             0,
         ]
         await running_manager.abort()
-        assert running_manager._status == StatusEnum.COMPLETED
+        assert running_manager._status == StatusEnum.ABORTED
 
     @pytest.mark.asyncio
     async def test_abort_returns_timestamp_after_sigkill(self, running_manager: SubprocessManager) -> None:

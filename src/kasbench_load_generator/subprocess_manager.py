@@ -43,6 +43,11 @@ class SubprocessManager:
         self._internal_error_count: int = 0
         self._last_five_errors: list[str] = []
 
+        # Timing and abort state
+        self._start_time: str | None = None
+        self._end_time: str | None = None
+        self._aborted: bool = False
+
         # Subprocess placeholders
         self._process: subprocess.Popen | None = None
         self._monitor_task: asyncio.Task | None = None
@@ -71,6 +76,8 @@ class SubprocessManager:
             InternalErrorCount=self._internal_error_count,
             LastFiveErrorMessages=list(self._last_five_errors),
             CurrentTimeStamp=current_timestamp,
+            StartTime=self._start_time,
+            EndTime=self._end_time,
         )
 
     def _record_error(self, msg: str) -> None:
@@ -161,6 +168,14 @@ class SubprocessManager:
                 detail="A subprocess is already running",
             )
 
+        # Reset state before launch so state is clean even if launch fails
+        self._end_time = None
+        self._aborted = False
+        self._success_count = 0
+        self._failure_count = 0
+        self._internal_error_count = 0
+        self._last_five_errors = []
+
         try:
             self._prepare_artifacts()
         except (OSError, PermissionError) as exc:
@@ -195,25 +210,20 @@ class SubprocessManager:
                 detail=f"Failed to start subprocess: {exc}",
             ) from exc
 
-        # Reset counters for the new run
-        self._success_count = 0
-        self._failure_count = 0
-        self._internal_error_count = 0
-        self._last_five_errors = []
-
         # Update state
         self._status = StatusEnum.RUNNING
         self._role = request.Role.value
 
-        # Start monitor task (implementation in a later task)
+        # Start monitor task
         self._monitor_task = asyncio.create_task(self._monitor_process())
 
-        # Generate start timestamp
+        # Generate start timestamp and record it
         now = datetime.now(timezone.utc)
         start_timestamp = (
             now.strftime("%Y-%m-%dT%H:%M:%S.")
             + f"{now.microsecond // 1000:03d}Z"
         )
+        self._start_time = start_timestamp
 
         return StartResponse(StartTimeStamp=start_timestamp)
 
@@ -236,6 +246,9 @@ class SubprocessManager:
                 detail="No subprocess is currently running",
             )
 
+        # Mark as aborted before attempting termination
+        self._aborted = True
+
         try:
             # Send SIGTERM
             self._process.terminate()
@@ -254,13 +267,15 @@ class SubprocessManager:
                 detail=f"Resource unavailable: {exc}",
             ) from exc
         except (ProcessLookupError, OSError) as exc:
+            self._status = StatusEnum.FAILED
+            self._record_error(f"Failed to terminate subprocess: {exc}")
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to terminate subprocess: {exc}",
             ) from exc
 
         # Update status
-        self._status = StatusEnum.COMPLETED
+        self._status = StatusEnum.ABORTED
 
         # Cancel the monitor task if running
         if self._monitor_task is not None and not self._monitor_task.done():
@@ -273,24 +288,64 @@ class SubprocessManager:
             + f"{now.microsecond // 1000:03d}Z"
         )
 
+        # Record end time
+        self._end_time = stop_timestamp
+
         return AbortResponse(StopTimeStamp=stop_timestamp)
+
+    def _read_stats_db(self) -> None:
+        """Read success/failure counts from the Locust stats SQLite DB."""
+        try:
+            conn = sqlite3.connect(self._db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COALESCE(SUM(num_requests), 0), COALESCE(SUM(num_failures), 0) FROM requests"
+            )
+            row = cursor.fetchone()
+            conn.close()
+            if row:
+                self._success_count = row[0]
+                self._failure_count = row[1]
+        except (sqlite3.Error, OSError) as exc:
+            self._record_error(f"Failed to read stats DB: {exc}")
 
     async def _monitor_process(self) -> None:
         """Monitor the subprocess and update status when it exits.
 
-        Polls process.poll() every 1 second. When the process exits
-        (poll() returns not None), sets status to COMPLETED and closes
-        the output file handle.
+        Polls process.poll() every 1 second while reading stats from the
+        Locust SQLite database. When the process exits (poll() returns not
+        None), performs a final stats read, determines status based on exit
+        code and abort flag, records end time, and closes the output file.
         """
         if self._process is None:
             return
 
         while self._process.poll() is None:
+            self._read_stats_db()
             await asyncio.sleep(1)
+
+        # Process has exited - perform final stats read
+        self._read_stats_db()
 
         # Close output file handle
         if self._output_file is not None:
             self._output_file.close()
             self._output_file = None
 
-        self._status = StatusEnum.COMPLETED
+        # Skip status determination if aborted (abort() already set status)
+        if self._aborted:
+            return
+
+        # Determine status based on exit code
+        exit_code = self._process.poll()
+        if exit_code == 0:
+            self._status = StatusEnum.SUCCESS
+        else:
+            self._status = StatusEnum.FAILED
+
+        # Record end time
+        now = datetime.now(timezone.utc)
+        self._end_time = (
+            now.strftime("%Y-%m-%dT%H:%M:%S.")
+            + f"{now.microsecond // 1000:03d}Z"
+        )

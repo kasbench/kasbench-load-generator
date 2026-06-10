@@ -51,7 +51,7 @@ class TestIsRunning:
 
     def test_is_running_false_when_completed(self) -> None:
         mgr = SubprocessManager(db_path="/tmp/test.db", output_path="/tmp/test.log")
-        mgr._status = StatusEnum.COMPLETED
+        mgr._status = StatusEnum.SUCCESS
         assert mgr.is_running is False
 
 

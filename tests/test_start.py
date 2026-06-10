@@ -184,7 +184,7 @@ class TestStart:
     @pytest.mark.asyncio
     async def test_start_resets_counters(self, manager: SubprocessManager, valid_request: StartRequest) -> None:
         # Set non-zero values
-        manager._status = StatusEnum.COMPLETED
+        manager._status = StatusEnum.SUCCESS
         manager._success_count = 42
         manager._failure_count = 7
         manager._internal_error_count = 3

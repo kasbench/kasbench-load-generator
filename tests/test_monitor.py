@@ -1,7 +1,7 @@
 """Unit tests for _monitor_process method (Task 3.7).
 
 Tests verify:
-- Polling detects process exit and updates status to COMPLETED
+- Polling detects process exit and updates status
 - Status update occurs within STATUS_UPDATE_TIMEOUT_SECONDS (5 seconds)
 - Graceful handling when self._process is None
 - Status remains unchanged until the process actually exits
@@ -41,7 +41,7 @@ class TestMonitorProcessNoneProcess:
     async def test_does_not_set_completed_when_process_is_none(
         self, manager: SubprocessManager
     ) -> None:
-        """Status should NOT be set to COMPLETED if process was never assigned."""
+        """Status should NOT change if process was never assigned."""
         manager._status = StatusEnum.NOT_STARTED
 
         await manager._monitor_process()
@@ -56,22 +56,23 @@ class TestMonitorProcessDetectsExit:
     async def test_sets_status_completed_when_process_exits(
         self, manager: SubprocessManager
     ) -> None:
-        """When process.poll() returns not None, status should become COMPLETED."""
+        """When process.poll() returns not None, status should become SUCCESS."""
         mock_process = MagicMock()
-        # First call returns None (still running), second returns 0 (exited)
-        mock_process.poll.side_effect = [None, 0]
+        # First call returns None (still running), second returns 0 (exited),
+        # third returns 0 (post-loop exit code check)
+        mock_process.poll.side_effect = [None, 0, 0]
         manager._process = mock_process
         manager._status = StatusEnum.RUNNING
 
         await manager._monitor_process()
 
-        assert manager._status == StatusEnum.COMPLETED
+        assert manager._status == StatusEnum.SUCCESS
 
     @pytest.mark.asyncio
     async def test_sets_completed_on_immediate_exit(
         self, manager: SubprocessManager
     ) -> None:
-        """If process already exited before first poll, status becomes COMPLETED."""
+        """If process already exited before first poll, status becomes SUCCESS."""
         mock_process = MagicMock()
         # poll() returns exit code immediately (process already done)
         mock_process.poll.return_value = 0
@@ -80,13 +81,13 @@ class TestMonitorProcessDetectsExit:
 
         await manager._monitor_process()
 
-        assert manager._status == StatusEnum.COMPLETED
+        assert manager._status == StatusEnum.SUCCESS
 
     @pytest.mark.asyncio
-    async def test_sets_completed_on_nonzero_exit_code(
+    async def test_sets_failed_on_nonzero_exit_code(
         self, manager: SubprocessManager
     ) -> None:
-        """Status should be COMPLETED regardless of exit code (even non-zero)."""
+        """Status should be FAILED when exit code is non-zero and not aborted."""
         mock_process = MagicMock()
         mock_process.poll.return_value = 1  # Non-zero exit code
         manager._process = mock_process
@@ -94,7 +95,7 @@ class TestMonitorProcessDetectsExit:
 
         await manager._monitor_process()
 
-        assert manager._status == StatusEnum.COMPLETED
+        assert manager._status == StatusEnum.FAILED
 
     @pytest.mark.asyncio
     async def test_polls_multiple_times_before_detecting_exit(
@@ -103,14 +104,16 @@ class TestMonitorProcessDetectsExit:
         """Should poll repeatedly until process exits."""
         mock_process = MagicMock()
         # Process runs for several polls before exiting
-        mock_process.poll.side_effect = [None, None, None, 0]
+        # Extra 0 at end for the post-loop exit_code check
+        mock_process.poll.side_effect = [None, None, None, 0, 0]
         manager._process = mock_process
         manager._status = StatusEnum.RUNNING
 
         await manager._monitor_process()
 
-        assert manager._status == StatusEnum.COMPLETED
-        assert mock_process.poll.call_count == 4
+        assert manager._status == StatusEnum.SUCCESS
+        # 4 calls in/for the loop + 1 post-loop call for exit code
+        assert mock_process.poll.call_count == 5
 
 
 class TestMonitorProcessTiming:
@@ -126,7 +129,8 @@ class TestMonitorProcessTiming:
         detection should happen well within 5 seconds.
         """
         mock_process = MagicMock()
-        mock_process.poll.side_effect = [None, 0]
+        # Extra 0 for post-loop exit code check
+        mock_process.poll.side_effect = [None, 0, 0]
         manager._process = mock_process
         manager._status = StatusEnum.RUNNING
 
@@ -140,7 +144,7 @@ class TestMonitorProcessTiming:
         ) as mock_sleep:
             await manager._monitor_process()
 
-        assert manager._status == StatusEnum.COMPLETED
+        assert manager._status == StatusEnum.SUCCESS
         # Verify sleep was called with 1 second interval
         mock_sleep.assert_called_with(1)
 
@@ -150,7 +154,8 @@ class TestMonitorProcessTiming:
     ) -> None:
         """Verify the poll interval is 1 second (satisfies the 5s timeout requirement)."""
         mock_process = MagicMock()
-        mock_process.poll.side_effect = [None, None, 0]
+        # Extra 0 for post-loop exit code check
+        mock_process.poll.side_effect = [None, None, 0, 0]
         manager._process = mock_process
         manager._status = StatusEnum.RUNNING
 
@@ -224,4 +229,4 @@ class TestMonitorProcessAsAsyncTask:
         await task
 
         assert other_ran
-        assert manager._status == StatusEnum.COMPLETED
+        assert manager._status == StatusEnum.SUCCESS
