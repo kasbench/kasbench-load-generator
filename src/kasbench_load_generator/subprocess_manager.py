@@ -294,18 +294,34 @@ class SubprocessManager:
         return AbortResponse(StopTimeStamp=stop_timestamp)
 
     def _read_stats_db(self) -> None:
-        """Read success/failure counts from the Locust stats SQLite DB."""
+        """Read success/failure counts from the Locust stats SQLite DB.
+
+        The Locust users log every request to a 'logs' table. Successful
+        requests have exception='None', failed requests have a non-null
+        exception value.
+
+        If the 'logs' table doesn't exist yet (Locust hasn't spawned users),
+        this is a no-op — counters stay at their current values.
+        """
         try:
             conn = sqlite3.connect(self._db_path)
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT COALESCE(SUM(num_requests), 0), COALESCE(SUM(num_failures), 0) FROM requests"
+                "SELECT "
+                "COALESCE(SUM(CASE WHEN exception = 'None' THEN 1 ELSE 0 END), 0), "
+                "COALESCE(SUM(CASE WHEN exception != 'None' THEN 1 ELSE 0 END), 0) "
+                "FROM logs"
             )
             row = cursor.fetchone()
             conn.close()
             if row:
                 self._success_count = row[0]
                 self._failure_count = row[1]
+        except sqlite3.OperationalError as exc:
+            # "no such table: logs" is expected during Locust startup
+            # before users have been spawned — silently skip.
+            if "no such table" not in str(exc):
+                self._record_error(f"Failed to read stats DB: {exc}")
         except (sqlite3.Error, OSError) as exc:
             self._record_error(f"Failed to read stats DB: {exc}")
 
