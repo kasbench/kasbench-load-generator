@@ -39,22 +39,45 @@ The service binds to `0.0.0.0:8080`.
 
 ### GET /health
 
-Returns the current status of the load generator.
+Returns the current status and lifecycle state of the load generator.
 
 **Response 200:**
 
 ```json
 {
-  "Status": "not-started | running | completed",
+  "Status": "not-started | running | success | failed | aborted",
   "Role": "trader",
   "Health": "healthy | unhealthy",
-  "SuccessCount": 0,
-  "FailureCount": 0,
+  "SuccessCount": 142,
+  "FailureCount": 3,
   "InternalErrorCount": 0,
   "LastFiveErrorMessages": [],
-  "CurrentTimeStamp": "2026-06-01T10:18:00.000Z"
+  "CurrentTimeStamp": "2026-06-01T10:30:00.123Z",
+  "StartTime": "2026-06-01T10:25:00.456Z",
+  "EndTime": null
 }
 ```
+
+| Field | Description |
+|-------|-------------|
+| Status | Subprocess lifecycle state: `not-started`, `running`, `success`, `failed`, `aborted` |
+| Role | The load profile role for this instance |
+| Health | `healthy` if no internal errors, `unhealthy` otherwise |
+| SuccessCount | Number of successful HTTP requests made by Locust (polled from stats DB) |
+| FailureCount | Number of failed HTTP requests made by Locust (polled from stats DB) |
+| InternalErrorCount | Number of internal errors in the subprocess manager |
+| LastFiveErrorMessages | Bounded FIFO of the 5 most recent internal error messages |
+| CurrentTimeStamp | Current server time (ISO 8601 UTC, ms precision) |
+| StartTime | When POST /start was processed, or `null` if never started |
+| EndTime | When the subprocess terminated, or `null` if still running or never started |
+
+**Status transitions:**
+
+- `not-started` → `running`: successful POST /start
+- `running` → `success`: process exits with code 0
+- `running` → `failed`: process exits with non-zero code
+- `running` → `aborted`: POST /abort terminates the process
+- Any terminal state → `running`: new POST /start
 
 ### POST /start
 
@@ -90,6 +113,11 @@ Launches a Locust subprocess with the specified parameters.
 }
 ```
 
+**Side effects on start:**
+- Resets `SuccessCount`, `FailureCount`, `InternalErrorCount`, and `LastFiveErrorMessages` to zero/empty
+- Resets `EndTime` to null
+- Records `StartTime` as the current UTC timestamp
+
 **Errors:** 409 (already running), 422 (validation), 500 (system error), 503 (resource exhaustion)
 
 ### POST /abort
@@ -104,7 +132,11 @@ Terminates the running Locust subprocess. Sends SIGTERM, escalates to SIGKILL af
 }
 ```
 
-**Errors:** 409 (not running), 500, 503
+**Side effects on abort:**
+- Sets status to `aborted`
+- Records `EndTime` as the current UTC timestamp
+
+**Errors:** 409 (not running), 500 (OS error during termination), 503 (resource exhaustion)
 
 ### GET /download-db
 
@@ -132,6 +164,7 @@ src/kasbench_load_generator/
 ├── subprocess_manager.py   # Locust subprocess lifecycle management
 ├── kasbench_shape.py       # Custom LoadTestShape with intensity lookup tables
 └── users/                  # Locust HttpUser subclasses (one per role)
+    ├── base_user.py        # Base class with shared logic and request logging
     ├── portfolio_manager_user.py
     ├── trader_user.py
     ├── back_office_user.py
@@ -140,6 +173,21 @@ src/kasbench_load_generator/
 ```
 
 The service enforces a single-subprocess constraint — only one Locust process runs at a time. The `SubprocessManager` handles launching, monitoring, and terminating the child process while tracking health counters and error state in memory.
+
+### Monitor Loop
+
+While the Locust subprocess is running, a background asyncio task polls every 1 second:
+1. Checks if the process has exited (`process.poll()`)
+2. Reads the SQLite stats database to update `SuccessCount` and `FailureCount`
+3. On process exit: performs a final stats read, determines terminal status based on exit code, records `EndTime`
+
+### Stats Database
+
+Locust users log every HTTP request to a `logs` table in the shared SQLite database. The monitor reads aggregate counts:
+- Successful requests: rows where `exception = 'None'`
+- Failed requests: rows where `exception != 'None'`
+
+The `logs` table is created by Locust users on spawn, so the monitor silently skips reads until the table exists.
 
 ## Load Shape
 
@@ -162,18 +210,18 @@ Tests use pytest with pytest-asyncio for async endpoint testing and Hypothesis f
 
 ## Configuration
 
-Fixed container paths (defined in `config.py`):
+All configuration is via environment variables with sensible defaults (defined in `config.py`):
 
-| Constant | Value | Purpose |
-|----------|-------|---------|
-| `DB_PATH` | `/data/kasbench.db` | SQLite database written by Locust |
-| `OUTPUT_PATH` | `/data/output.log` | Captured subprocess stdout/stderr |
-| `HOST` | `0.0.0.0` | Server bind address |
-| `PORT` | `8080` | Server port |
-| `TERMINATION_TIMEOUT_SECONDS` | `10` | SIGTERM grace period before SIGKILL |
-| `STATUS_UPDATE_TIMEOUT_SECONDS` | `5` | Max delay detecting subprocess exit |
-| `RABBITMQ_HOST` | `localhost` | Hostname of RabbitMQ server |
-| `RABBITMQ_PORT` | `5672` | Port of the RabbitMQ server |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_PATH` | `/data/kasbench.db` | Path to the SQLite database file |
+| `OUTPUT_PATH` | `/data/output.log` | Path to the Locust output log file |
+| `HOST` | `0.0.0.0` | Host address the server binds to |
+| `PORT` | `8080` | Port the server listens on |
+| `TERMINATION_TIMEOUT_SECONDS` | `10` | Timeout in seconds for graceful subprocess termination |
+| `STATUS_UPDATE_TIMEOUT_SECONDS` | `5` | Timeout in seconds for subprocess status updates |
+| `RABBITMQ_HOST` | `localhost` | RabbitMQ server hostname |
+| `RABBITMQ_PORT` | `5672` | RabbitMQ server port |
 
 ## Docker
 
@@ -197,19 +245,6 @@ docker run -p 9090:9090 \
   -e RABBITMQ_HOST=rabbitmq.local \
   kasbench-load-generator
 ```
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DB_PATH` | `/data/kasbench.db` | Path to the SQLite database file |
-| `OUTPUT_PATH` | `/data/output.log` | Path to the Locust output log file |
-| `HOST` | `0.0.0.0` | Host address the server binds to |
-| `PORT` | `8080` | Port the server listens on |
-| `TERMINATION_TIMEOUT_SECONDS` | `10` | Timeout in seconds for graceful subprocess termination |
-| `STATUS_UPDATE_TIMEOUT_SECONDS` | `5` | Timeout in seconds for subprocess status updates |
-| `RABBITMQ_HOST` | `localhost` | RabbitMQ server hostname |
-| `RABBITMQ_PORT` | `5672` | RabbitMQ server port |
 
 ## License
 
