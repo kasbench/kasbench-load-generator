@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from kasbench_load_generator import config
 from locust_common import portal_client as portal_client
 from locust_common.portal_common import create_cash_transaction, post_transactions, create_models
-from locust_common.securities import securities
+# from locust_common.securities import securities
 
 PORTFOLIOS_PER_MODEL = 5
 POSITIONS_PER_MODEL = 10
@@ -47,7 +47,7 @@ class BaseUser(HttpUser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.conn = None
-        self.securities = securities
+        # self.securities = securities
         self.user_id = str(uuid.uuid4())
         self.sqlite_db = config.DB_PATH
         self.portfolio_ids = []
@@ -114,13 +114,13 @@ class BaseUser(HttpUser):
                 raise Exception(f"Failed to fund portfolio: {portfolio_id}. Results: {results}")
         return funded_portfolio_ids
 
-    def create_models_for_portfolios(self, portfolio_ids):
-        # print("Creating model")
-        response = create_models(self.client, self.securities, portfolio_ids, POSITIONS_PER_MODEL, len(portfolio_ids), 1)
-        if response:
-            return response
-        else:
-            raise Exception(f"No models created.")
+    # def create_models_for_portfolios(self, portfolio_ids):
+    #     # print("Creating model")
+    #     response = create_models(self.client, self.securities, portfolio_ids, POSITIONS_PER_MODEL, len(portfolio_ids), 1)
+    #     if response:
+    #         return response
+    #     else:
+    #         raise Exception(f"No models created.")
 
     def rebalance_models(self, model_id):
         # print("Rebalancing model")

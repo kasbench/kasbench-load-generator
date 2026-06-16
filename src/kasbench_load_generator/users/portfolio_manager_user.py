@@ -5,7 +5,7 @@ from pathlib import Path
 
 from locust import task
 
-from base_user import BaseUser
+from base_user import BaseUser, POSITIONS_PER_MODEL
 from locust_common.rabbitmq import get_one_or_none, FUNDED_PORTFOLIO_QUEUE_NAME, sync_publish, MODEL_QUEUE_NAME, \
     REBALANCE_QUEUE_NAME, ORDER_QUEUE_NAME
 
@@ -15,14 +15,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import locust_common.portal_client as portal_client
 
-from locust_common.portal_common import post_portfolio_group
-
+from locust_common.portal_common import post_portfolio_group, create_models
 
 
 class PortfolioManagerUser(BaseUser):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.securities = portal_client.get_securities(self.client)
+
+    def create_models_for_portfolios(self, portfolio_ids):
+        # print("Creating model")
+        response = create_models(self.client, self.securities, portfolio_ids, POSITIONS_PER_MODEL, len(portfolio_ids), 1)
+        if response:
+            return response
+        else:
+            raise Exception(f"No models created.")
 
 
     @task
