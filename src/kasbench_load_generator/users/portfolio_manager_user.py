@@ -28,11 +28,12 @@ class PortfolioManagerUser(BaseUser):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.securities = self.get_security_list
+        self.securities = self.get_security_list()
+        
 
     def create_models_for_portfolios(self, portfolio_ids):
         # print("Creating model")
-        response = create_models(self.client, self.securities, portfolio_ids, POSITIONS_PER_MODEL, len(portfolio_ids), 1)
+        response = create_models(self.client, list(self.securities), portfolio_ids, POSITIONS_PER_MODEL, len(portfolio_ids), 1)
         if response:
             return response
         else:
