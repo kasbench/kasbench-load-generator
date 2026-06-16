@@ -22,7 +22,7 @@ class PortfolioManagerUser(BaseUser):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.securities = portal_client.get_securities(self.client)
+        self.securities = list(portal_client.get_securities(self.client).json())
 
     def create_models_for_portfolios(self, portfolio_ids):
         # print("Creating model")
