@@ -17,6 +17,7 @@ import locust_common.portal_client as portal_client
 
 from locust_common.portal_common import post_portfolio_group
 
+ITERATIONS = 20
 
 class TraderUser(BaseUser):
 
@@ -25,17 +26,20 @@ class TraderUser(BaseUser):
 
     @task
     def run_sequential(self):
-        self.wait_short()
+        
+        for _ in range(ITERATIONS):
+        
+            self.wait_very_short()
 
-        # Get a submitted order
-        order_id = get_one_or_none(ORDER_QUEUE_NAME)
-        if not order_id:
-            return
+            # Get a submitted order
+            order_id = get_one_or_none(ORDER_QUEUE_NAME)
+            if not order_id:
+                return
 
-        # Execute the trade
-        execution_id = self.submit_trade(int(order_id))
+            # Execute the trade
+            execution_id = self.submit_trade(int(order_id))
 
-        # Publish the execution id to the execution queue
-        sync_publish(EXECUTION_QUEUE_NAME, str(execution_id))
+            # Publish the execution id to the execution queue
+            sync_publish(EXECUTION_QUEUE_NAME, str(execution_id))
 
         self.wait_short()
