@@ -192,7 +192,7 @@ class BaseUser(HttpUser):
         # print("Submitting trades for order: ", submitted_order_id)
         response = portal_client.get_trade_by_order_id(self.client, submitted_order_id)
         # print(f"Response: {response.text}")
-        if response.ok:
+        if response.ok and response.json()['content']:
             id = response.json()['content'][0]['id']
             quantity = response.json()['content'][0]['quantity']
             quantitySent = response.json()['content'][0]['quantitySent']
