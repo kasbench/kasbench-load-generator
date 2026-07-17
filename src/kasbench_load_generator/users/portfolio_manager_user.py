@@ -87,7 +87,7 @@ class PortfolioManagerUser(BaseUser):
                 submitted_order_ids = self.submit_orders(batch_order_ids)
                 for submitted_order_id in submitted_order_ids:
                     sync_publish(ORDER_QUEUE_NAME, str(submitted_order_id))
-                    time.sleep(random.uniform(1, 10))
+                    self.wait_short()
                 
             except Exception as e:
                 print(f"Error submitting orders for batch {i}: {e}")
