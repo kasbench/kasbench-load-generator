@@ -28,6 +28,10 @@ class PortfolioManagerUser(BaseUser):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.securities = []
+
+    def on_start(self):
+        super().on_start()
         self.securities = self.get_security_list()
         
 
