@@ -25,7 +25,7 @@ def extract_kubeconfig_and_dump_certs(config_path="~/.kube/config"):
     # 1. Resolve Active Context
     current_context_name = config.get("current-context")
     context_data = next(c["context"] for c in config["contexts"] if c["name"] == current_context_name)
-    namespace = context_data.get("namespace", "default")
+    namespace = context_data.get("namespace", "globeco")
     
     # 2. Extract API Server Address
     cluster_name = context_data["cluster"]
@@ -73,7 +73,7 @@ def extract_kubeconfig_and_dump_certs(config_path="~/.kube/config"):
 # Parse config ONCE at execution initialization
 try:
     K8S_HOST, K8S_NAMESPACE, CA_PATH, CLIENT_CERT_TUPLE = extract_kubeconfig_and_dump_certs("~/.kube/config")
-    logging.info(f"K8S_HOST={K8S_HOST}, CA_PATH={CA_PATH}, CLIENT_CERT_TUPLE={CLIENT_CERT_TUPLE}")
+    logging.info(f"K8S_HOST={K8S_HOST}, CA_PATH={CA_PATH}, CLIENT_CERT_TUPLE={CLIENT_CERT_TUPLE}, K8S_NAMESPACE={K8S_NAMESPACE}")
 except Exception as e:
     logging.info(f"Error parsing local kubeconfig: {e}")
     # Fallbacks to prevent crash before runtime loops
@@ -131,14 +131,18 @@ def get_current_image_name_and_tag(deployment_name, container_name=None):
 
 
 def patch_deployment(client, deployment_name, patch_payload, namespace="globeco"):
-    """Patches a deployment with the given payload via Locust's HTTP client."""
-    url = f"/apis/apps/v1/namespaces/{namespace}/deployments/{deployment_name}"
-    response = client.patch(
+    """Patches a deployment with the given payload via raw requests."""
+    url = f"{K8S_HOST}/apis/apps/v1/namespaces/{namespace}/deployments/{deployment_name}"
+    logging.info(f"Sending PATCH request to {url}")
+    response = raw_requests.patch(
         url,
+        verify=CA_PATH,
+        cert=CLIENT_CERT_TUPLE,
         json=patch_payload,
         headers={"Content-Type": "application/strategic-merge-patch+json"},
-        catch_response=True,
+        timeout=30,
     )
+    logging.info(f"PATCH response: {response.status_code} - {response.text}")
     return response
 
 
