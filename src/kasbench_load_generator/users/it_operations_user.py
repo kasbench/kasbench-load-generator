@@ -6,6 +6,7 @@ import os
 import yaml
 import base64
 
+import requests as raw_requests
 from locust import HttpUser, task, between
 
 logging.basicConfig(level=logging.INFO)
@@ -90,59 +91,51 @@ def generate_random_event_time_in_seconds(benchmark_length_minutes, lower_margin
 
 
 def run_batch(client):
+    """Runs the allocations batch job."""
     url = "/allocations/api/v1/executions/send"
     response = client.post(url)
     return response
 
 def get_current_image_name_and_tag(deployment_name, container_name=None):
-
+    """Fetches the current image name and tag for a container in a deployment."""
     if not container_name:
         container_name = deployment_name
     
     url = f"{K8S_HOST}/apis/apps/v1/namespaces/{K8S_NAMESPACE}/deployments/{deployment_name}"
 
-    try:
-        # 1. Execute an HTTP GET request to fetch the full deployment manifest
-        response = requests.get(
-            url,
-            verify=CA_PATH,
-            cert=CLIENT_CERT_TUPLE if 'CLIENT_CERT_TUPLE' in locals() and CLIENT_CERT_TUPLE else None
-        )
+    response = raw_requests.get(
+        url,
+        verify=CA_PATH,
+        cert=CLIENT_CERT_TUPLE,
+        timeout=30,
+    )
 
-        if response.status_code == 200:
-            deployment_data = response.json()
-            
-            # 2. Target the containers array inside the pod template spec
-            containers = deployment_data["spec"]["template"]["spec"]["containers"]
-            
-            # 3. Find the matching container and extract its image name
-            for container in containers:
-                if container["name"] == container_name:
-                    current_image = container["image"]
-                    break
-            else:
-                raise  ValueError(f"Container '{container_name}' not found in deployment '{deployment_name}'")
-                
-        else:
-            logging.error(f"Failed to fetch deployment: Status {response.status_code}")
-            logging.error(f"Response: {response.text}")
-            raise ValueError(f"Error fetching deployment: {response.status_code}")
+    if response.status_code != 200:
+        logging.error(f"Failed to fetch deployment: Status {response.status_code}")
+        logging.error(f"Response: {response.text}")
+        raise ValueError(f"Error fetching deployment: {response.status_code}")
 
-    except Exception as e:
-        logging.error(f"Connection Error: {e}")
-        raise e
+    deployment_data = response.json()
+    
+    # Target the containers array inside the pod template spec
+    containers = deployment_data["spec"]["template"]["spec"]["containers"]
+    
+    # Find the matching container and extract its image name
+    for container in containers:
+        if container["name"] == container_name:
+            current_image = container["image"]
+            image_name, image_tag = current_image.split(":", 1)
+            return image_name, image_tag
+    
+    raise ValueError(f"Container '{container_name}' not found in deployment '{deployment_name}'")
 
-    # 4. Return the image name and tag separately
-    return current_image.split(":")[0], current_image.split(":")[1]
 
 def patch_deployment(client, deployment_name, patch_payload, namespace="globeco"):
-    """Patches a deployment with the given payload."""
-    url = f"{K8S_HOST}/apis/apps/v1/namespaces/{namespace}/deployments/{deployment_name}"
+    """Patches a deployment with the given payload via Locust's HTTP client."""
+    url = f"/apis/apps/v1/namespaces/{namespace}/deployments/{deployment_name}"
     response = client.patch(
         url,
         json=patch_payload,
-        verify=CA_PATH,
-        cert=CLIENT_CERT_TUPLE if 'CLIENT_CERT_TUPLE' in locals() and CLIENT_CERT_TUPLE else None,
         headers={"Content-Type": "application/strategic-merge-patch+json"},
         catch_response=True,
     )
@@ -150,9 +143,12 @@ def patch_deployment(client, deployment_name, patch_payload, namespace="globeco"
 
 
 def upgrade_image(client, deployment_name, container_name=None, release_suffix="-high-cpu", namespace="globeco"):
-    """ Upgrades and rolls out an image to a new release."""
+    """Upgrades and rolls out an image to a new release."""
+    if not container_name:
+        container_name = deployment_name
+
     # Get the current image name and tag
-    image, tag = get_current_image_name_and_tag(deployment_name)
+    image, tag = get_current_image_name_and_tag(deployment_name, container_name)
     # Create the new image name with the release suffix
     new_image_name = f"{image}{release_suffix}:{tag}"
     logging.info(f"Upgrading deployment {deployment_name} to {new_image_name}")
@@ -163,8 +159,8 @@ def upgrade_image(client, deployment_name, container_name=None, release_suffix="
                 "spec": {
                     "containers": [
                         {
-                            "name": f"{container_name}",
-                            "image": f"{new_image_name}"
+                            "name": container_name,
+                            "image": new_image_name,
                         }
                     ]
                 }
@@ -172,7 +168,7 @@ def upgrade_image(client, deployment_name, container_name=None, release_suffix="
         }
     }
 
-    response = patch_deployment(client, deployment_name, patch_payload)
+    response = patch_deployment(client, deployment_name, patch_payload, namespace)
     if response.status_code == 200:
         logging.info(f"Successfully upgraded deployment {deployment_name} to {new_image_name}")
     else:
@@ -186,8 +182,8 @@ class ItOperationsUser(HttpUser):
     """Simulates IT operations HTTP traffic."""
 
     wait_time = between(5, 5)
+    host = K8S_HOST
 
-    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.benchmark_length_minutes = 5
@@ -195,7 +191,6 @@ class ItOperationsUser(HttpUser):
         self.cd_release_time_in_seconds = 0
         self.batch_job_started = False
         self.cd_release_deployed = False
-        self.host = K8S_HOST
         self.deployment_name = "globeco-portfolio-service"
 
     def on_start(self):
@@ -216,17 +211,13 @@ class ItOperationsUser(HttpUser):
             f"CD release will start at {self.cd_release_time_in_seconds} seconds into the benchmark"
         )
 
-        # Prepare TLS verification and paths safely per virtual user.
-        # Provide the extracted CA file to establish trust for your API server
+        # Configure TLS for the Locust HTTP client
         self.client.verify = CA_PATH
-        
-        # Authenticate using your generated client certificates
         if CLIENT_CERT_TUPLE:
             self.client.cert = CLIENT_CERT_TUPLE
             
         self.client.headers.update({
             "Accept": "application/json",
-            "Content-Type": "application/strategic-merge-patch+json"
         })
 
 
@@ -250,5 +241,10 @@ class ItOperationsUser(HttpUser):
         if not self.cd_release_deployed and run_time >= self.cd_release_time_in_seconds:
             # Deploy the CD release
             logging.info("Deploying CD release!")
-
-
+            try:
+                upgrade_image(self.client, self.deployment_name)
+                self.cd_release_deployed = True
+                logging.info("CD release deployed!")
+            except Exception as e:
+                logging.error(f"CD release failed: {e}")
+                self.cd_release_deployed = True
