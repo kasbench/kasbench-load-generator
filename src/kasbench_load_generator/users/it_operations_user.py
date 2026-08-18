@@ -182,7 +182,7 @@ def upgrade_image(client, deployment_name, container_name=None, release_suffix="
     return response
 
 
-class ItOperationsUser(HttpUser):
+class ItOperationsUser(BaseUser):
     """Simulates IT operations HTTP traffic."""
 
     wait_time = between(5, 5)
