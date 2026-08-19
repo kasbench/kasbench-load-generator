@@ -94,11 +94,11 @@ class BaseUser(HttpUser):
 
 
     def wait_short(self):
-        time.sleep(random.uniform(1.0 * self.base_delay_percentage/100.0, 10.0 * self.base_delay_percentage/100))
+        time.sleep(random.uniform(1.0 * self.base_delay_percentage/100.0, 10.0 * self.base_delay_percentage/100.0))
 
 
     def wait_very_short(self):
-        time.sleep(random.uniform(0.1 * self.base_delay_percentage/100.0, 1.0 * self.base_delay_percentage/100))
+        time.sleep(random.uniform(0.1 * self.base_delay_percentage/100.0, 1.0 * self.base_delay_percentage/100.0))
 
 
     def fund_portfolios_with_cash(self, portfolio_ids):
