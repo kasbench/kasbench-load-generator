@@ -9,6 +9,9 @@ import base64
 import requests as raw_requests
 from locust import HttpUser, task, between
 
+from base_user import BaseUser
+
+
 logging.basicConfig(level=logging.INFO)
 
 
