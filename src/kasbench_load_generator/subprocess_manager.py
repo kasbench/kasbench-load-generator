@@ -130,7 +130,7 @@ class SubprocessManager:
         # Locust -f accepts comma-separated file paths
         locustfiles = f"{user_file},{shape_file}"
 
-        return [
+        response = [
             "locust",
             "--headless",
             "-f",
@@ -150,6 +150,12 @@ class SubprocessManager:
             "--kasbench-url",
             request.KasbenchUrl,
         ]
+        
+        if request.Fixed:
+            response.extend(["--fixed", str(request.Fixed)])
+    
+
+        return response
 
     async def start(self, request: StartRequest) -> StartResponse:
         """Launch the Locust subprocess.
