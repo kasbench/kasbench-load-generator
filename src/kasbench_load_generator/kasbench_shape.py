@@ -12,6 +12,7 @@ def _(parser, **kwargs):
     parser.add_argument("--base-load-intensity", type=int, default=100)
     parser.add_argument("--base-delay-percentage", type=int, default=100)
     parser.add_argument("--kasbench-url", type=str, default="")
+    parser.add_argument("--fixed", type=int, default=-1)
 
 
 # Precalculated intensity lookup tables mapping simulated minute (at 30-min
@@ -253,6 +254,7 @@ class KasbenchCustomShape(LoadTestShape):
         benchmark_length_minutes: int = options.benchmark_length_minutes
         base_load_intensity: int = options.base_load_intensity
         spawn_rate: int = options.spawn_rate
+        fixed = options.fixed
 
         # Compression factor: maps real time to simulated 1440-minute day
         ratio = 1440 / benchmark_length_minutes
@@ -263,6 +265,10 @@ class KasbenchCustomShape(LoadTestShape):
         # Terminate if we've completed the simulated day
         if simulated_minutes >= 1440:
             return None
+
+        # Fixed always takes priority
+        if fixed > 0:
+            return (fixed, spawn_rate)
 
         # IT-operations always returns constant 1 user
         if role == "it-operations":
