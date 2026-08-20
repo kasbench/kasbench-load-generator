@@ -35,6 +35,7 @@ class StartRequest(BaseModel):
     SpawnRate: int = Field(ge=1, le=100)
     BaseDelayPercentage: int = Field(ge=0, le=1000)
     KasbenchUrl: str
+    Fixed: int | None = None
 
     @field_validator("KasbenchUrl")
     @classmethod
