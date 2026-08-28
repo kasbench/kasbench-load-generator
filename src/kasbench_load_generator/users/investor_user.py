@@ -21,12 +21,14 @@ from locust_common.portal_common import post_portfolio_group
 
 class Investor(BaseUser):
 
+    wait_time = between(5, 20)
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @task(90)
-    def no_op(self):
-        time.sleep(5)
+    # @task(90)
+    # def no_op(self):
+    #     time.sleep(5)
 
     @task(10)
     def run_sequential(self):

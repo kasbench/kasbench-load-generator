@@ -41,7 +41,7 @@ logging.basicConfig(level=logging.INFO)
 
 class BaseUser(HttpUser):
     counter = 0
-    wait_time = between(5, 20)
+    wait_time = between(5, 10)
     abstract = True
 
     def __init__(self, *args, **kwargs):
@@ -198,13 +198,19 @@ class BaseUser(HttpUser):
             quantitySent = response.json()['content'][0]['quantitySent']
             response = portal_client.submit_trade(self.client,  [id], [quantity - quantitySent])
             if response.ok:
-                # print(f"Submitted trade: {id}")
-                # print(f"Response: {response.json()}")
                 execution_id = response.json()["results"][0]["execution"]["executionServiceId"]
+            
+                # Simulate a read of the results
+                portal_client.get_execution(self.client, execution_id)
+            
                 return execution_id
             else:
                 raise Exception(f"Failed to submit trade: {id}.  Status code: {response.status_code}, Reason: {response.reason}")
+            
         else:
+            if response.ok:
+                print("No content in response for order: ", submitted_order_id, ". Response: ", response.json())
+                raise Exception(f"Failed to get trade order: {submitted_order_id}. No content in response.")
             raise Exception(f"Failed to get trade order: {submitted_order_id}.  Status code: {response.status_code}, Reason: {response.reason}")
 
 

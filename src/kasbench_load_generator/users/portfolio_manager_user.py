@@ -49,13 +49,15 @@ class PortfolioManagerUser(BaseUser):
         self.wait_short()
 
 
-        # Get a funded portfolio
-        funded_portfolio_id = get_one_or_none(FUNDED_PORTFOLIO_QUEUE_NAME)
-        if not funded_portfolio_id:
+        # Get three funded portfolios
+        funded_portfolio_ids = []
+        for _ in range(3):
+            funded_portfolio_ids.append(get_one_or_none(FUNDED_PORTFOLIO_QUEUE_NAME))
+        if not funded_portfolio_ids:
             return
-
+        
         # Create models for each funded portfolio
-        model_ids = self.create_models_for_portfolios([funded_portfolio_id])
+        model_ids = self.create_models_for_portfolios(funded_portfolio_ids)
         self.wait_short()
 
         if not model_ids:
@@ -68,30 +70,32 @@ class PortfolioManagerUser(BaseUser):
             self.wait_short()
             sync_publish(MODEL_QUEUE_NAME, model_id)
 
-        # Rebalance one of the models
-        self.wait_short()
-        rebalance_id = self.rebalance_models(model_ids[0])
-        sync_publish(REBALANCE_QUEUE_NAME, rebalance_id)
+        # Rebalance each of the models
+        for model_id in model_ids:
+            self.wait_short()
+            rebalance_id = self.rebalance_models(model_id)
+            sync_publish(REBALANCE_QUEUE_NAME, rebalance_id)
 
-        # Submit the rebalance (send to the Order Service)
-        self.wait_short()
-        order_ids = self.submit_rebalance(rebalance_id)
+            # Submit the rebalance (send to the Order Service)
+            self.wait_short()
+            order_ids = self.submit_rebalance(rebalance_id)
      
-        # Process order_ids in batches of max_orders
-        max_orders = 10
-        for i in range(0, len(order_ids), max_orders):
-            try:
-                batch_order_ids = order_ids[i:i+max_orders]
-                self.wait_short()
-                # Submit order (send to Trading Service)
-                submitted_order_ids = self.submit_orders(batch_order_ids)
-                for submitted_order_id in submitted_order_ids:
-                    sync_publish(ORDER_QUEUE_NAME, str(submitted_order_id))
+            # Process order_ids in batches of max_orders
+            max_orders = 10
+            for i in range(0, len(order_ids), max_orders):
+                try:
+                    batch_order_ids = order_ids[i:i+max_orders]
+                    if not batch_order_ids:
+                        continue
                     self.wait_short()
-                
-            except Exception as e:
-                print(f"Error submitting orders for batch {i}: {e}")
-                continue
+                    # Submit order (send to Trading Service)
+                    submitted_order_ids = self.submit_orders(batch_order_ids)
+                    for submitted_order_id in submitted_order_ids:
+                        sync_publish(ORDER_QUEUE_NAME, str(submitted_order_id))
+                        self.wait_very_short()
+                except Exception as e:
+                    print(f"Error submitting orders for batch {i}: {e}")
+                    continue
 
       
         

@@ -25,9 +25,9 @@ class BackOfficeUser(BaseUser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    wait_time = between(30, 60)
+    # wait_time = between(30, 60)
 
-    @task
+    @task(2)
     def add_and_fund(self):
         self.wait_short()
         # Create a group of portfolios
@@ -49,7 +49,7 @@ class BackOfficeUser(BaseUser):
             sync_publish(FUNDED_PORTFOLIO_QUEUE_NAME, portfolio_id)
             self.wait_short()
 
-    @task
+    @task(1)
     def review(self):
         self.wait_short()
 

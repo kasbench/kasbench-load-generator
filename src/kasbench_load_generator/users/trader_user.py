@@ -17,15 +17,17 @@ import locust_common.portal_client as portal_client
 
 from locust_common.portal_common import post_portfolio_group
 
-ITERATIONS = 20
+ITERATIONS = 40
 
 class TraderUser(BaseUser):
+
+    counter = 0
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @task
-    def run_sequential(self):
+    @task(2)
+    def trading(self):
         
         for _ in range(ITERATIONS):
         
@@ -43,3 +45,17 @@ class TraderUser(BaseUser):
             sync_publish(EXECUTION_QUEUE_NAME, str(execution_id))
 
         self.wait_short()
+
+    @task(1)
+    def analysis(self):
+        # Get next 10 orders
+        self.wait_short()
+        portal_client.get_orders(self.client, offset=self.counter*10, limit=10)
+        # Get the next 10 trades
+        self.wait_short()
+        portal_client.get_trades(self.client, offset=self.counter*10, limit=10)
+        self.counter += 1
+        # Get executions for the first portfolio id
+        self.wait_short()
+        portal_client.get_executions(self.client, portfolio_id=portfolio_ids[0])
+
