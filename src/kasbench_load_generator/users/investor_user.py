@@ -3,7 +3,8 @@ import sys
 import time
 from pathlib import Path
 
-from locust import task
+from locust import task, between
+
 
 from base_user import BaseUser
 from locust_common.rabbitmq import get_one_or_none, FUNDED_PORTFOLIO_QUEUE_NAME, sync_publish, MODEL_QUEUE_NAME, \

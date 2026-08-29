@@ -329,3 +329,18 @@ def get_health(base:str) -> requests.Response:
     return response
 
 
+# Portfolio Accounting Functions
+
+def get_balance_for_portfolio(client, id:str):
+    balance = f"/api/balances?portfolioId={id}"
+    response = client.get(balance, name="/api/balances?portfolio_id={id}")
+    return response
+
+def get_transactions_for_portfolio(client, id:str):
+    transactions = f"/api/transactions?portfolioId={id}"
+    response = client.get(transactions, name="/api/transactions?portfolio_id={id}")
+    return response
+
+    
+
+
