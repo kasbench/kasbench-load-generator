@@ -113,3 +113,5 @@ uv.lock
 
 # Miscellaneous
 experiments/calibration/run.out
+
+src/kasbench_load_generator/locust_common/*.ipynb

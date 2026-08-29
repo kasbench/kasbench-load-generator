@@ -53,19 +53,20 @@ class TraderUser(BaseUser):
         portal_client.get_orders(self.client, offset=self.counter*10, limit=10)
         # Get the next 10 trades
         self.wait_short()
-        trades = portal_client.get_trades(self.client, offset=self.counter*10, limit=10)
-        self.counter += 1
+        trades = portal_client.get_trades(self.client, offset=self.counter*10, limit=10).json()
         # Get executions for the first portfolio id
         self.wait_short()
-        if trades:
-            portfolio_ids = list(set([t['portfolioId'] for t in trades if t['portfolioId']]))
+        if trades and "content" in trades:
+            self.counter += 1
+            portfolio_ids = set(item["portfolio"]["portfolioId"] for item in trades["content"])
             for portfolio_id in portfolio_ids:
                 portal_client.get_executions(self.client, portfolio_id=portfolio_id)
                 self.wait_very_short()
                 portal_client.get_balance_for_portfolio(self.client, portfolio_id)
                 self.wait_very_short()
                 portal_client.get_transactions_for_portfolio(self.client, portfolio_id)
-
+                self.wait_very_short()
+            
 
         
 
