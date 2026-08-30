@@ -140,12 +140,8 @@ class BaseUser(HttpUser):
         return portal_client.submit_rebalance(self.client, rebalance_id)
 
     def submit_orders(self, order_ids):
-        # print("Submitting orders")
         response = portal_client.submit_order(self.client, {"orderIds": order_ids})
         if response.ok:
-            # print("Submitted order results:")
-            # print(response.json())
-            # print()
             successful = response.json()['successful']
             failed = response.json()['failed']
             if failed:
@@ -158,7 +154,6 @@ class BaseUser(HttpUser):
             raise Exception(f"Failed to submit orders: {order_ids}.  Status code: {response.status_code}, Reason: {response.reason}")
 
     def submit_trades_bulk(self, submitted_order_ids):
-        # print("Submitting trades")
         execution_ids = []
         response = portal_client.submit_trade(self.client, submitted_order_ids, [1] * len(submitted_order_ids))
         if not response.ok:
@@ -168,11 +163,8 @@ class BaseUser(HttpUser):
         return response.json()
 
     def submit_trades(self, submitted_order_ids):
-        # print("Submitting trades")
         execution_ids = []
         for order_id in submitted_order_ids:
-            # print(f"Order id: {order_id}")
-            # Get the trade order to find the id and quantity
             response = portal_client.get_trade_by_order_id(self.client, order_id)
 
             if response.ok:
@@ -189,7 +181,6 @@ class BaseUser(HttpUser):
                 raise Exception(f"Failed to get trade order: {order_id}.  Status code: {response.status_code}, Reason: {response.reason}")
 
     def submit_trade(self, submitted_order_id):
-        # print("Submitting trades for order: ", submitted_order_id)
         response = portal_client.get_trade_by_order_id(self.client, submitted_order_id)
         # print(f"Response: {response.text}")
         if response.ok and response.json()['content']:
@@ -210,7 +201,8 @@ class BaseUser(HttpUser):
         else:
             if response.ok:
                 print("No content in response for order: ", submitted_order_id, ". Response: ", response.json())
-                raise Exception(f"Failed to get trade order: {submitted_order_id}. No content in response.")
+                # raise Exception(f"Failed to get trade order: {submitted_order_id}. No content in response.")
+                return None
             raise Exception(f"Failed to get trade order: {submitted_order_id}.  Status code: {response.status_code}, Reason: {response.reason}")
 
 

@@ -42,7 +42,8 @@ class TraderUser(BaseUser):
             execution_id = self.submit_trade(int(order_id))
 
             # Publish the execution id to the execution queue
-            sync_publish(EXECUTION_QUEUE_NAME, str(execution_id))
+            if execution_id is not None:
+                sync_publish(EXECUTION_QUEUE_NAME, str(execution_id))
 
         self.wait_short()
 

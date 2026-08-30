@@ -20,8 +20,13 @@ ORDER_GROUP_QUEUE_NAME = 'order_group_queue'
 CASH_GROUP_QUEUE_NAME = 'cash_group_queue'
 MODEL_GROUP_QUEUE_NAME = 'model_group_queue'
 
-# Mute pika's verbose INFO logs, only show WARNING or ERROR if something actually breaks
-logging.getLogger("pika").setLevel(logging.WARNING)
+# Pika logs full ERROR-level tracebacks (StreamLostError, the misleading
+# "ProbableAccessDeniedError" / "probable permission error" messages) whenever
+# a connection is torn down -- including the idle drops that this module
+# transparently recovers from. Since we handle those via reconnect-on-use,
+# silence pika below CRITICAL so its internal teardown noise doesn't flood the
+# logs. Our own retry/failure logging (below) remains the source of truth.
+logging.getLogger("pika").setLevel(logging.CRITICAL)
 
 # Number of times to retry an operation if the cached connection has gone stale.
 _MAX_RETRIES = 2
@@ -40,13 +45,19 @@ def _connection_parameters() -> pika.ConnectionParameters:
     return pika.ConnectionParameters(
         host=config.RABBITMQ_HOST,
         port=config.RABBITMQ_PORT,
-        # Keep the connection alive while idle between tasks.
-        heartbeat=60,
+        # Disable AMQP heartbeats. Under gevent with long idle gaps between
+        # tasks (wait_time is 5-10s plus several wait_short() calls), pika's
+        # heartbeat frames are easily delayed past the deadline, causing the
+        # broker to drop an otherwise-fine connection. We rely on TCP keepalive
+        # plus reconnect-on-use instead, which is more robust for a client that
+        # idles between bursts. (0 = heartbeats off.)
+        heartbeat=0,
         blocked_connection_timeout=30,
         # Don't hang forever if the broker is momentarily saturated.
         socket_timeout=10,
-        # Enable TCP keepalive so dead peers are detected.
-        tcp_options={"TCP_KEEPIDLE": 60, "TCP_KEEPINTVL": 10, "TCP_KEEPCNT": 5},
+        # Aggressive TCP keepalive so dead/idle-reaped peers are detected and
+        # cleaned up at the socket layer rather than surfacing mid-operation.
+        tcp_options={"TCP_KEEPIDLE": 20, "TCP_KEEPINTVL": 10, "TCP_KEEPCNT": 3},
     )
 
 
@@ -120,12 +131,19 @@ def _run_with_reconnect(operation):
             # Force a reconnect on the next iteration.
             _close_local(quiet=True)
             if attempt < _MAX_RETRIES:
-                logging.warning(
-                    "RabbitMQ operation failed (attempt %d/%d), reconnecting: %s",
+                # An idle connection dropped by the broker/network and then
+                # transparently re-established is expected under load, not an
+                # error worth alarming on. Log it at DEBUG so it doesn't drown
+                # the logs; only full retry exhaustion (below) is a real failure.
+                logging.debug(
+                    "RabbitMQ connection stale (attempt %d/%d), reconnecting: %s",
                     attempt + 1,
                     _MAX_RETRIES + 1,
                     exc,
                 )
+    logging.warning(
+        "RabbitMQ operation failed after %d attempts: %s", _MAX_RETRIES + 1, last_exc
+    )
     raise last_exc
 
 
