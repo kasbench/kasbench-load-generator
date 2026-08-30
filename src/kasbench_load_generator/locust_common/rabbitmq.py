@@ -1,5 +1,7 @@
 import logging
+import random
 import threading
+import time
 
 import pika
 import pika.exceptions
@@ -29,7 +31,15 @@ MODEL_GROUP_QUEUE_NAME = 'model_group_queue'
 logging.getLogger("pika").setLevel(logging.CRITICAL)
 
 # Number of times to retry an operation if the cached connection has gone stale.
-_MAX_RETRIES = 2
+_MAX_RETRIES = 4
+
+# Backoff between reconnect attempts. Retrying instantly means all attempts fire
+# inside the same CPU-starvation / momentary-saturation window on the broker and
+# all fail together. Spacing them out (with jitter to avoid a thundering herd of
+# greenlets all reconnecting in lockstep) gives the broker's connection acceptor
+# time to catch up. Capped so a task never blocks for too long.
+_BACKOFF_BASE_SECONDS = 0.1
+_BACKOFF_MAX_SECONDS = 2.0
 
 # Under Locust/gevent every simulated user runs in its own greenlet. A pika
 # BlockingConnection is not safe to share across greenlets, so we keep one
@@ -53,8 +63,10 @@ def _connection_parameters() -> pika.ConnectionParameters:
         # idles between bursts. (0 = heartbeats off.)
         heartbeat=0,
         blocked_connection_timeout=30,
-        # Don't hang forever if the broker is momentarily saturated.
-        socket_timeout=10,
+        # Give the handshake more room to complete when the broker's acceptor is
+        # briefly starved of CPU (co-located with the CPU-hungry load generator).
+        socket_timeout=15,
+        stack_timeout=20,
         # Aggressive TCP keepalive so dead/idle-reaped peers are detected and
         # cleaned up at the socket layer rather than surfacing mid-operation.
         tcp_options={"TCP_KEEPIDLE": 20, "TCP_KEEPINTVL": 10, "TCP_KEEPCNT": 3},
@@ -141,6 +153,11 @@ def _run_with_reconnect(operation):
                     _MAX_RETRIES + 1,
                     exc,
                 )
+                # Capped exponential backoff with full jitter. time.sleep yields
+                # the greenlet under gevent, so this also frees the CPU for the
+                # broker's acceptor to catch up during a saturation spike.
+                backoff = min(_BACKOFF_BASE_SECONDS * (2 ** attempt), _BACKOFF_MAX_SECONDS)
+                time.sleep(random.uniform(0, backoff))
     logging.warning(
         "RabbitMQ operation failed after %d attempts: %s", _MAX_RETRIES + 1, last_exc
     )
