@@ -49,9 +49,9 @@ class PortfolioManagerUser(BaseUser):
         self.wait_short()
 
 
-        # Get three funded portfolios
+        # Get one funded portfolio.  May be increased in future iterations.
         funded_portfolio_ids = []
-        for _ in range(3):
+        for _ in range(1):
             funded_portfolio_ids.append(get_one_or_none(FUNDED_PORTFOLIO_QUEUE_NAME))
         if not funded_portfolio_ids:
             return
