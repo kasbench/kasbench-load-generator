@@ -46,3 +46,16 @@ STATUS_UPDATE_TIMEOUT_SECONDS: int = _parse_positive_int("STATUS_UPDATE_TIMEOUT_
 # RabbitMQ settings
 RABBITMQ_HOST: str = os.environ.get("RABBITMQ_HOST", "localhost")
 RABBITMQ_PORT: int = _parse_positive_int("RABBITMQ_PORT", 5672)
+
+# Number of background publisher greenlets draining the in-process publish
+# buffer. Sustained publish throughput scales roughly linearly with this, so
+# raise it if you see "publish buffer full" warnings under peak load.
+RABBITMQ_PUBLISHERS: int = _parse_positive_int("RABBITMQ_PUBLISHERS", 8)
+
+# Whether published messages are persisted to disk by the broker. Persistence
+# forces a per-message fsync that serializes and dominates publish latency under
+# load. For a load generator these queues carry transient IDs, so durability is
+# off by default for much higher throughput. Set RABBITMQ_PERSISTENT=1 to enable.
+RABBITMQ_PERSISTENT: bool = os.environ.get("RABBITMQ_PERSISTENT", "0").lower() in (
+    "1", "true", "yes",
+)

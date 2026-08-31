@@ -69,10 +69,11 @@ _log = logging.getLogger("rabbitmq")
 # Tuning knobs
 # ---------------------------------------------------------------------------
 
-# Number of dedicated publisher greenlets (each holds one persistent connection).
-# Small on purpose: a couple of connections can easily sustain thousands of
-# publishes/sec because publishing is cheap and asynchronous.
-_PUBLISHER_COUNT = 2
+# Number of dedicated publisher greenlets (each holds one connection). Each one
+# drains and publishes serially, so sustained throughput scales roughly linearly
+# with this count. Still a tiny, fixed number of connections for the broker.
+# Overridable via RABBITMQ_PUBLISHERS for tuning against your peak load.
+_PUBLISHER_COUNT = config.RABBITMQ_PUBLISHERS
 
 # Max messages buffered in memory awaiting publish. Bounded so a broker outage
 # can't grow memory without limit. If the buffer fills, sync_publish blocks
@@ -81,6 +82,24 @@ _PUBLISH_BUFFER_SIZE = 10000
 
 # How long sync_publish waits for buffer space before giving up on a message.
 _ENQUEUE_TIMEOUT_SECONDS = 5.0
+
+# Each publisher greenlet drains up to this many messages per wake-up and
+# publishes them back-to-back before yielding, amortizing per-iteration
+# overhead and greatly increasing sustained throughput.
+_PUBLISH_BATCH_SIZE = 100
+
+# Persistent (delivery_mode=2) messages force the broker to fsync each message
+# to disk before it's considered stored, which serializes publishing and is the
+# dominant throughput limiter under load. For a load generator these queues hold
+# transient IDs that other simulated users pull back out; losing one occasionally
+# just means a workflow isn't picked up, which is already tolerated (see the
+# buffer-full drop path). So default to transient (non-persistent) delivery for
+# far higher publish throughput. Set RABBITMQ_PERSISTENT=1 to restore durability.
+_DELIVERY_MODE = (
+    pika.DeliveryMode.Persistent
+    if config.RABBITMQ_PERSISTENT
+    else pika.DeliveryMode.Transient
+)
 
 # Number of pooled connections shared by synchronous readers (get_one_or_none).
 _READER_POOL_SIZE = 4
@@ -151,6 +170,22 @@ _publishers_started = False
 _publisher_start_lock = BoundedSemaphore(1)
 
 
+def _drain_batch():
+    """Block for one message, then greedily collect up to a full batch.
+
+    Returns a list of (queue_name, message) tuples. Batching lets each publisher
+    push many messages between gevent yields, which is where the throughput gain
+    comes from versus one-message-per-iteration.
+    """
+    batch = [_publish_buffer.get()]  # blocks until at least one is available
+    while len(batch) < _PUBLISH_BATCH_SIZE:
+        try:
+            batch.append(_publish_buffer.get_nowait())
+        except gevent.queue.Empty:
+            break
+    return batch
+
+
 def _publisher_loop(worker_id: int):
     """Long-lived greenlet: hold one connection and drain the publish buffer."""
     connection = None
@@ -158,60 +193,54 @@ def _publisher_loop(worker_id: int):
     declared = set()
 
     while True:
-        try:
-            queue_name, message = _publish_buffer.get()
-        except Exception:
-            gevent.sleep(0.1)
-            continue
+        batch = _drain_batch()
 
-        published = False
-        for attempt in range(_MAX_RETRIES + 1):
-            try:
-                if connection is None or not connection.is_open or channel is None or not channel.is_open:
-                    connection = _open_connection_with_retry()
-                    channel = connection.channel()
-                    declared = set()
+        for queue_name, message in batch:
+            published = False
+            for attempt in range(_MAX_RETRIES + 1):
+                try:
+                    if connection is None or not connection.is_open or channel is None or not channel.is_open:
+                        connection = _open_connection_with_retry()
+                        channel = connection.channel()
+                        declared = set()
 
-                _declare(channel, declared, queue_name)
-                channel.basic_publish(
-                    exchange='',  # Default exchange
-                    routing_key=queue_name,
-                    body=message,
-                    properties=pika.BasicProperties(
-                        delivery_mode=pika.DeliveryMode.Persistent
-                    ),
-                )
-                published = True
-                break
-            except (
-                pika.exceptions.AMQPConnectionError,
-                pika.exceptions.AMQPChannelError,
-                pika.exceptions.StreamLostError,
-                pika.exceptions.ConnectionClosed,
-                pika.exceptions.ChannelClosed,
-                ConnectionResetError,
-                OSError,
-            ) as exc:
-                # Drop the dead connection; it will be reopened on next attempt.
-                _safe_close(connection)
-                connection, channel, declared = None, None, set()
-                if attempt < _MAX_RETRIES:
-                    backoff = min(_BACKOFF_BASE_SECONDS * (2 ** attempt), _BACKOFF_MAX_SECONDS)
-                    gevent.sleep(random.uniform(0, backoff))
-                else:
-                    _log.warning(
-                        "publisher %d dropped a message to %s after %d attempts: %s",
-                        worker_id, queue_name, _MAX_RETRIES + 1, exc,
+                    _declare(channel, declared, queue_name)
+                    channel.basic_publish(
+                        exchange='',  # Default exchange
+                        routing_key=queue_name,
+                        body=message,
+                        properties=pika.BasicProperties(delivery_mode=_DELIVERY_MODE),
                     )
+                    published = True
+                    break
+                except (
+                    pika.exceptions.AMQPConnectionError,
+                    pika.exceptions.AMQPChannelError,
+                    pika.exceptions.StreamLostError,
+                    pika.exceptions.ConnectionClosed,
+                    pika.exceptions.ChannelClosed,
+                    ConnectionResetError,
+                    OSError,
+                ) as exc:
+                    # Drop the dead connection; reopen on next attempt.
+                    _safe_close(connection)
+                    connection, channel, declared = None, None, set()
+                    if attempt < _MAX_RETRIES:
+                        backoff = min(_BACKOFF_BASE_SECONDS * (2 ** attempt), _BACKOFF_MAX_SECONDS)
+                        gevent.sleep(random.uniform(0, backoff))
+                    else:
+                        _log.warning(
+                            "publisher %d dropped a message to %s after %d attempts: %s",
+                            worker_id, queue_name, _MAX_RETRIES + 1, exc,
+                        )
 
-        if not published:
-            # Last-resort: put it back at the tail so a healthier publisher can
-            # retry it later, unless the buffer is full (then we drop to avoid
-            # blocking the whole pool during a sustained outage).
-            try:
-                _publish_buffer.put_nowait((queue_name, message))
-            except Exception:
-                pass
+            if not published:
+                # Last-resort re-queue so a healthier publisher can retry, unless
+                # the buffer is full (then drop to avoid blocking during outage).
+                try:
+                    _publish_buffer.put_nowait((queue_name, message))
+                except Exception:
+                    pass
 
 
 def _ensure_publishers():

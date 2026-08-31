@@ -57,6 +57,7 @@ class PortfolioManagerUser(BaseUser):
             return
         
         # Create models for each funded portfolio
+        self.wait_short()
         model_ids = self.create_models_for_portfolios(funded_portfolio_ids)
         self.wait_short()
 
