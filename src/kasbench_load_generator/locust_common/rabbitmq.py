@@ -280,6 +280,32 @@ class _PooledConnection:
         self.declared = set()
         return self.channel
 
+    def reset_channel(self):
+        """Rebuild just the channel, keeping the underlying connection.
+
+        A pika channel is single-operation-at-a-time. If a basic_get is
+        interrupted (e.g. the borrowing greenlet is killed mid-call, or a
+        reset happens between the get and its GetOk), the channel is left with
+        a half-registered GetOk callback and every subsequent basic_get on it
+        raises DuplicateGetOkCallback. Recreating the channel clears that state
+        without paying for a full reconnect handshake.
+        """
+        if self.connection is not None and self.connection.is_open:
+            try:
+                if self.channel is not None and self.channel.is_open:
+                    self.channel.close()
+            except Exception:
+                pass
+            try:
+                self.channel = self.connection.channel()
+                self.declared = set()
+                return
+            except Exception:
+                # Channel couldn't be rebuilt on this connection; fall through
+                # to a full close so channel_ready() reopens everything.
+                pass
+        self.close()
+
     def close(self):
         _safe_close(self.connection)
         self.connection = None
@@ -312,6 +338,7 @@ def get_one_or_none(queue_name='task_queue'):
     # Borrow a pooled connection (blocks briefly if all are in use).
     pooled = _reader_pool.get()
     last_exc = None
+    completed = False
     try:
         for attempt in range(_MAX_RETRIES + 1):
             try:
@@ -323,8 +350,20 @@ def get_one_or_none(queue_name='task_queue'):
                 if method_frame:
                     message_content = body.decode('utf-8')
                     channel.basic_ack(delivery_tag=method_frame.delivery_tag)
+                    completed = True
                     return message_content
+                completed = True
                 return None
+            except pika.exceptions.ChannelError as exc:
+                # Channel-level fault (notably DuplicateGetOkCallback from an
+                # interrupted prior basic_get, which subclasses ChannelError but
+                # NOT AMQPChannelError). Rebuild just the channel to clear the
+                # stale GetOk state; the connection itself is still good.
+                last_exc = exc
+                pooled.reset_channel()
+                if attempt < _MAX_RETRIES:
+                    backoff = min(_BACKOFF_BASE_SECONDS * (2 ** attempt), _BACKOFF_MAX_SECONDS)
+                    gevent.sleep(random.uniform(0, backoff))
             except (
                 pika.exceptions.AMQPConnectionError,
                 pika.exceptions.AMQPChannelError,
@@ -335,7 +374,7 @@ def get_one_or_none(queue_name='task_queue'):
                 OSError,
             ) as exc:
                 last_exc = exc
-                pooled.close()  # force reopen on next attempt
+                pooled.close()  # force full reopen on next attempt
                 if attempt < _MAX_RETRIES:
                     backoff = min(_BACKOFF_BASE_SECONDS * (2 ** attempt), _BACKOFF_MAX_SECONDS)
                     gevent.sleep(random.uniform(0, backoff))
@@ -345,6 +384,16 @@ def get_one_or_none(queue_name='task_queue'):
         )
         raise last_exc
     finally:
+        # If this borrow did not finish cleanly (an exception propagated, or the
+        # greenlet was killed by Locust mid-basic_get), the channel may be left
+        # with a half-registered GetOk callback. Reset it before returning to the
+        # pool so the next borrower never inherits a poisoned channel -- the
+        # cause of the DuplicateGetOkCallback storms.
+        if not completed:
+            try:
+                pooled.reset_channel()
+            except Exception:
+                pooled.close()
         # Always return the connection to the pool (even if closed; it will be
         # lazily reopened by the next borrower).
         _reader_pool.put(pooled)
