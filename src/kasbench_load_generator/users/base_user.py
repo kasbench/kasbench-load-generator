@@ -20,7 +20,7 @@ from locust_common.portal_common import create_cash_transaction, post_transactio
 # from locust_common.securities import securities
 
 PORTFOLIOS_PER_MODEL = 5
-POSITIONS_PER_MODEL = 10
+POSITIONS_PER_MODEL = 25
 MAX_RETRIES = 3
 
 # Set resource limits for Mac

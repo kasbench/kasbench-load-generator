@@ -27,14 +27,14 @@ def generate_model_positions(num_positions, securities, cash=0.05, increment=0.0
 
 
 def create_cash_transaction(portfolio_id: int) -> list[dict]:
-    # 60% of portfolios between $100,000 and $1 million.  The rest between $1 million and $4 million.
+    # 60% of portfolios between $500,000 and $1 million.  The rest between $1 million and $6 million.
     today = datetime.date.today()
     today_formatted = today.strftime("%Y%m%d")
 
     if random.random() < 0.6:
-        cash = random.randrange(100_000, 1_000_000)
+        cash = random.randrange(500_000, 1_000_000)
     else:
-        cash = random.randrange(1_000_000, 4_000_000)
+        cash = random.randrange(1_000_000, 6_000_000)
 
     transaction = {
         'portfolioId' : portfolio_id,
